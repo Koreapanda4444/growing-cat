@@ -1,8 +1,10 @@
 import pygame
 import sys
 import os
+
 from cat import Cat
 import state
+
 
 WIDTH = 400
 HEIGHT = 600
@@ -10,6 +12,30 @@ FPS = 60
 
 ASSETS_DIR = "assets"
 BACK_IMAGE = "ui/background.png"
+FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
+
+INFO_X = 8
+INFO_Y = 18
+
+BTN_TIME = pygame.Rect(8, 46, 96, 30)
+
+STAT_X = 235
+STAT_Y_START = 28
+STAT_GAP = 38
+BAR_HEIGHT = 10
+BAR_WIDTH = 155
+
+TAB_Y = 550
+TAB_W = 100
+TAB_H = 34
+
+PANEL_W = 110
+PANEL_BTN_H = 26
+PANEL_GAP = 4
+PANEL_Y = 270
+
+ARROW_RECT = pygame.Rect(365, 320, 24, 44)
+
 
 class Game:
     def __init__(self):
@@ -20,34 +46,38 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        self.bg_color = (240, 240, 240)
-
         self.back_image = self.load_image(BACK_IMAGE)
         self.back_image = pygame.transform.scale(self.back_image, (WIDTH, HEIGHT))
         self.back_rect = self.back_image.get_rect(topleft=(0, 0))
+
         pygame.font.init()
-        FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
         try:
-            self.font = pygame.font.Font(FONT_PATH, 22)
+            self.font = pygame.font.Font(FONT_PATH, 18)        # 날짜
+            self.small_font = pygame.font.Font(FONT_PATH, 15) # 상단 버튼
+            self.panel_font = pygame.font.Font(FONT_PATH, 17) # 행동 패널
+            self.tab_font = pygame.font.Font(FONT_PATH, 18)   # 하단 탭
+            self.stat_font = pygame.font.Font(FONT_PATH, 16)  # ⭐ 게이지 전용
         except:
-            self.font = pygame.font.Font(None, 28)
+            self.font = pygame.font.Font(None, 18)
+            self.small_font = pygame.font.Font(None, 15)
+            self.panel_font = pygame.font.Font(None, 17)
+            self.tab_font = pygame.font.Font(None, 18)
+            self.stat_font = pygame.font.Font(None, 16)
 
         self.state = state.GameState()
         self.cat = Cat()
 
-        self.btn_time = pygame.Rect(100, 520, 200, 40)
+        self.panel_open = False
 
-        self.btn_feed = pygame.Rect(30, 420, 150, 40)
-        self.btn_play = pygame.Rect(220, 420, 150, 40)
-        self.btn_clean = pygame.Rect(100, 470, 200, 40)
+        self.btn_shop = pygame.Rect(20, TAB_Y, TAB_W, TAB_H)
+        self.btn_minigame = pygame.Rect(150, TAB_Y, TAB_W, TAB_H)
+        self.btn_bag = pygame.Rect(280, TAB_Y, TAB_W, TAB_H)
 
     def load_image(self, filename):
         path = os.path.join(ASSETS_DIR, filename)
         try:
             return pygame.image.load(path).convert_alpha()
-        except pygame.error as e:
-            print(f"[ERROR] 이미지 로드 실패: {path}")
-            print(e)
+        except:
             pygame.quit()
             sys.exit()
 
@@ -64,81 +94,128 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
-
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self.handle_click(event.pos)
 
     def handle_click(self, pos):
-        if self.btn_time.collidepoint(pos):
+        if BTN_TIME.collidepoint(pos):
             self.advance_time()
             return
 
-        if self.btn_feed.collidepoint(pos):
-            self.cat.feed_free()
+        if not self.panel_open and ARROW_RECT.collidepoint(pos):
+            self.panel_open = True
+            return
 
-        elif self.btn_play.collidepoint(pos):
-            self.cat.play_free()
+        if self.panel_open:
+            panel_x = WIDTH - PANEL_W - 8
+            close_rect = pygame.Rect(panel_x, PANEL_Y - PANEL_BTN_H - 4, PANEL_W, PANEL_BTN_H)
+            if close_rect.collidepoint(pos):
+                self.panel_open = False
+                return
 
-        elif self.btn_clean.collidepoint(pos):
-            self.cat.clean()
+            actions = [
+                self.cat.feed_free,
+                self.cat.play_free,
+                self.cat.clean,
+                self.advance_time,
+            ]
+
+            for i, action in enumerate(actions):
+                r = pygame.Rect(
+                    panel_x,
+                    PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
+                    PANEL_W,
+                    PANEL_BTN_H
+                )
+                if r.collidepoint(pos):
+                    action()
+                    return
 
     def advance_time(self):
         phase = self.state.advance_time()
-
         if phase == state.NIGHT:
             self.cat.on_night()
         else:
             self.cat.on_morning()
 
     def draw_bar(self, x, y, label, value, color):
-        width = 300
-        height = 18
-
         ratio = value / state.MAX_STAT
-        fill = int(width * ratio)
+        fill = int(BAR_WIDTH * ratio)
 
-        text = self.font.render(f"{label}: {int(value)}", True, (0, 0, 0))
-        self.screen.blit(text, (x, y - 18))
+        text = self.stat_font.render(f"{label}: {int(value)}", True, (0, 0, 0))
+        self.screen.blit(text, (x, y - 14))
 
-        pygame.draw.rect(self.screen, (0, 0, 0), (x, y, width, height), 2)
+        pygame.draw.rect(self.screen, (0, 0, 0), (x, y, BAR_WIDTH, BAR_HEIGHT), 1)
         pygame.draw.rect(
             self.screen,
             color,
-            (x + 2, y + 2, max(0, fill - 4), height - 4)
+            (x + 2, y + 2, max(0, fill - 4), BAR_HEIGHT - 4)
         )
 
-    def draw_button(self, rect, text, enabled=True):
-        color = (220, 220, 220) if enabled else (160, 160, 160)
-        pygame.draw.rect(self.screen, color, rect)
-        pygame.draw.rect(self.screen, (0, 0, 0), rect, 2)
-
-        txt = self.font.render(text, True, (0, 0, 0))
+    def draw_button(self, rect, text, font):
+        pygame.draw.rect(self.screen, (220, 220, 220), rect)
+        pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+        txt = font.render(text, True, (0, 0, 0))
         self.screen.blit(txt, txt.get_rect(center=rect.center))
 
     def draw(self):
-        self.screen.fill(self.bg_color)
         self.screen.blit(self.back_image, self.back_rect)
 
         info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
-        self.screen.blit(self.font.render(info, True, (0, 0, 0)), (20, 20))
+        self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
 
-        self.draw_bar(50, 80, "배고픔", self.cat.hunger, (255, 100, 100))
-        self.draw_bar(50, 130, "피로", self.cat.tiredness, (100, 100, 255))
-        self.draw_bar(50, 180, "행복", self.cat.happiness, (100, 255, 100))
-        self.draw_bar(50, 230, "청결", self.cat.cleanliness, (180, 180, 180))
+        btn_text = "밤으로 보내기" if self.state.time_phase == state.MORNING else "다음날 아침"
+        self.draw_button(BTN_TIME, btn_text, self.small_font)
 
-        is_morning = self.state.time_phase == state.MORNING
+        self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
+        self.draw_bar(STAT_X, STAT_Y_START + STAT_GAP, "피로", self.cat.tiredness, (100, 100, 255))
+        self.draw_bar(STAT_X, STAT_Y_START + 2 * STAT_GAP, "행복", self.cat.happiness, (100, 255, 100))
+        self.draw_bar(STAT_X, STAT_Y_START + 3 * STAT_GAP, "청결", self.cat.cleanliness, (180, 180, 180))
 
-        self.draw_button(self.btn_feed, "밥주기", True)
-        self.draw_button(self.btn_play, "놀이주기", True)
-        self.draw_button(self.btn_clean, "씻기기", True)
+        if not self.panel_open:
+            pygame.draw.rect(self.screen, (200, 200, 200), ARROW_RECT)
+            pygame.draw.rect(self.screen, (0, 0, 0), ARROW_RECT, 1)
+            arrow = self.font.render("▶", True, (0, 0, 0))
+            self.screen.blit(arrow, arrow.get_rect(center=ARROW_RECT.center))
 
-        time_text = "밤으로 보내기" if is_morning else "다음날 아침"
-        self.draw_button(self.btn_time, time_text, True)
+        if self.panel_open:
+            panel_x = WIDTH - PANEL_W - 8
+            panel_h = 4 * (PANEL_BTN_H + PANEL_GAP) + PANEL_BTN_H
+
+            pygame.draw.rect(
+                self.screen,
+                (230, 230, 230),
+                (panel_x, PANEL_Y - PANEL_BTN_H - 6, PANEL_W, panel_h)
+            )
+            pygame.draw.rect(
+                self.screen,
+                (0, 0, 0),
+                (panel_x, PANEL_Y - PANEL_BTN_H - 6, PANEL_W, panel_h),
+                1
+            )
+
+            self.draw_button(
+                pygame.Rect(panel_x, PANEL_Y - PANEL_BTN_H - 4, PANEL_W, PANEL_BTN_H),
+                "◀ 닫기",
+                self.panel_font
+            )
+
+            labels = ["밥", "놀기", "씻기", "잠자기"]
+            for i, label in enumerate(labels):
+                r = pygame.Rect(
+                    panel_x,
+                    PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
+                    PANEL_W,
+                    PANEL_BTN_H
+                )
+                self.draw_button(r, label, self.panel_font)
+
+        self.draw_button(self.btn_shop, "상점", self.tab_font)
+        self.draw_button(self.btn_minigame, "미니게임", self.tab_font)
+        self.draw_button(self.btn_bag, "가방", self.tab_font)
 
         pygame.display.flip()
 
