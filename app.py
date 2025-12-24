@@ -17,8 +17,6 @@ FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
 INFO_X = 8
 INFO_Y = 18
 
-BTN_TIME = pygame.Rect(8, 46, 96, 30)
-
 STAT_X = 235
 STAT_Y_START = 28
 STAT_GAP = 38
@@ -52,14 +50,12 @@ class Game:
 
         pygame.font.init()
         try:
-            self.font = pygame.font.Font(FONT_PATH, 18)        # 날짜
-            self.small_font = pygame.font.Font(FONT_PATH, 15) # 상단 버튼
-            self.panel_font = pygame.font.Font(FONT_PATH, 17) # 행동 패널
-            self.tab_font = pygame.font.Font(FONT_PATH, 18)   # 하단 탭
-            self.stat_font = pygame.font.Font(FONT_PATH, 16)  # ⭐ 게이지 전용
+            self.font = pygame.font.Font(FONT_PATH, 18)
+            self.panel_font = pygame.font.Font(FONT_PATH, 17)
+            self.tab_font = pygame.font.Font(FONT_PATH, 18)
+            self.stat_font = pygame.font.Font(FONT_PATH, 16)
         except:
             self.font = pygame.font.Font(None, 18)
-            self.small_font = pygame.font.Font(None, 15)
             self.panel_font = pygame.font.Font(None, 17)
             self.tab_font = pygame.font.Font(None, 18)
             self.stat_font = pygame.font.Font(None, 16)
@@ -101,10 +97,6 @@ class Game:
                 self.handle_click(event.pos)
 
     def handle_click(self, pos):
-        if BTN_TIME.collidepoint(pos):
-            self.advance_time()
-            return
-
         if not self.panel_open and ARROW_RECT.collidepoint(pos):
             self.panel_open = True
             return
@@ -120,7 +112,7 @@ class Game:
                 self.cat.feed_free,
                 self.cat.play_free,
                 self.cat.clean,
-                self.advance_time,
+                self.advance_time,   # ⭐ 잠자기 = 시간 진행
             ]
 
             for i, action in enumerate(actions):
@@ -166,9 +158,6 @@ class Game:
 
         info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
         self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
-
-        btn_text = "밤으로 보내기" if self.state.time_phase == state.MORNING else "다음날 아침"
-        self.draw_button(BTN_TIME, btn_text, self.small_font)
 
         self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
         self.draw_bar(STAT_X, STAT_Y_START + STAT_GAP, "피로", self.cat.tiredness, (100, 100, 255))
