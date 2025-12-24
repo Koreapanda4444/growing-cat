@@ -1,12 +1,13 @@
 import state
+import random
 
 
 class Cat:
     def __init__(self):
-        self.hunger = 0
-        self.tiredness = 0
-        self.happiness = 75
-        self.cleanliness = 75
+        self.hunger = random.randint(25, 50)
+        self.tiredness = random.randint(5, 25)
+        self.happiness = random.randint(50, 75)
+        self.cleanliness = random.randint(30, 80)
 
         self.alive = True
         self.runaway = False
@@ -77,22 +78,14 @@ class Cat:
 
     def _check_death(self):
         if (
-            self.hunger <= state.DEATH_HUNGER_THRESHOLD
+            self.hunger >= state.DEATH_HUNGER_THRESHOLD
             or self.tiredness >= state.DEATH_TIREDNESS_THRESHOLD
         ):
-            self._death_days += 1
-            if self._death_days >= 1:
-                self.alive = False
-        else:
-            self._death_days = 0
+            self.alive = False
 
     def _check_runaway(self):
         if (
             self.happiness <= state.RUNAWAY_HAPPINESS_THRESHOLD
-            and self.cleanliness <= state.RUNAWAY_CLEANLINESS_THRESHOLD
+            or self.cleanliness <= state.RUNAWAY_CLEANLINESS_THRESHOLD
         ):
-            self._runaway_days += 1
-            if self._runaway_days >= 1:
-                self.runaway = True
-        else:
-            self._runaway_days = 0
+            self.runaway = True

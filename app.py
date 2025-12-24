@@ -77,9 +77,6 @@ class Game:
             self.advance_time()
             return
 
-        if self.state.time_phase != state.MORNING:
-            return
-
         if self.btn_feed.collidepoint(pos):
             self.cat.feed_free()
 
@@ -136,9 +133,9 @@ class Game:
 
         is_morning = self.state.time_phase == state.MORNING
 
-        self.draw_button(self.btn_feed, "밥주기", is_morning)
-        self.draw_button(self.btn_play, "놀이주기", is_morning)
-        self.draw_button(self.btn_clean, "씻기기", is_morning)
+        self.draw_button(self.btn_feed, "밥주기", True)
+        self.draw_button(self.btn_play, "놀이주기", True)
+        self.draw_button(self.btn_clean, "씻기기", True)
 
         time_text = "밤으로 보내기" if is_morning else "다음날 아침"
         self.draw_button(self.btn_time, time_text, True)
