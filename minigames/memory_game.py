@@ -158,7 +158,11 @@ class MemoryGame:
 
         if all(c["matched"] for c in self.cards):
             reward = max(10, 100 - 10 * self.fail_count)
-            self.state.money += reward
+            if self.state is not None:
+                try:
+                    self.state.money = max(0, int(self.state.money) + int(reward))
+                except (TypeError, ValueError):
+                    self.state.money = max(0, int(reward))
             self.running = False
             return
 

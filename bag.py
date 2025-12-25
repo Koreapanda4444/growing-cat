@@ -34,15 +34,18 @@ class BagUI:
             "fish": {"name": "생선", "image": "assets/foods/fish.png"},
             "chur": {"name": "츄르", "image": "assets/foods/chur.png"},
             "meat": {"name": "고기", "image": "assets/evolution/meat.png"},
-            "doggrass": {"name": "풀밭", "image": "assets/toys/doggrass.png"},
+            "doggrass": {"name": "강아지풀", "image": "assets/toys/doggrass.png"},
             "fishing": {"name": "낚싯대", "image": "assets/toys/fishing.png"},
-            "meat": {"name": "고기", "image": "assets/evolution/meat.png"},
+            "string": {"name": "실", "image": "assets/toys/string.png"},
             "bone": {"name": "뼈", "image": "assets/evolution/bone.png"},
+
+            "사료": {"name": "밥", "image": "assets/foods/bab.png"},
             "밥": {"name": "밥", "image": "assets/foods/bab.png"},
             "생선": {"name": "생선", "image": "assets/foods/fish.png"},
             "츄르": {"name": "츄르", "image": "assets/foods/chur.png"},
             "고기": {"name": "고기", "image": "assets/evolution/meat.png"},
-            "풀밭": {"name": "풀밭", "image": "assets/toys/doggrass.png"},
+            "풀밭": {"name": "강아지풀", "image": "assets/toys/doggrass.png"},
+            "강아지풀": {"name": "강아지풀", "image": "assets/toys/doggrass.png"},
             "낚싯대": {"name": "낚싯대", "image": "assets/toys/fishing.png"},
             "실": {"name": "실", "image": "assets/toys/string.png"},
             "뼈": {"name": "뼈", "image": "assets/evolution/bone.png"},
@@ -73,10 +76,9 @@ class BagUI:
 
                 for rect, item in self.item_rects:
                     if rect.collidepoint(event.pos):
-                        if self.inventory[item] > 0:
+                        if self.inventory.get(item, 0) > 0:
                             if self.play_click_sound:
                                 self.play_click_sound()
-                            self.inventory[item] -= 1
                             self.on_use(item)
                             return
 

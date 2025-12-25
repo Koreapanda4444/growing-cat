@@ -40,7 +40,7 @@ class ShopUI:
                 {"name": "츄르", "price": 80, "id": "chur", "image": "assets/foods/chur.png"},
             ],
             "TOY": [
-                {"name": "풀밭", "price": 30, "id": "doggrass", "image": "assets/toys/doggrass.png"},
+                {"name": "강아지풀", "price": 30, "id": "doggrass", "image": "assets/toys/doggrass.png"},
                 {"name": "낚싯대", "price": 50, "id": "fishing", "image": "assets/toys/fishing.png"},
                 {"name": "실", "price": 40, "id": "string", "image": "assets/toys/string.png"},
             ],
@@ -93,8 +93,9 @@ class ShopUI:
                         if self.coin >= item["price"]:
                             if self.play_click_sound:
                                 self.play_click_sound()
-                            self.coin -= item["price"]
-                            self.on_buy(item)
+                            ok = self.on_buy(item)
+                            if ok:
+                                self.coin -= item["price"]
 
     def draw_top(self):
         face_rect = pygame.Rect(20, 10, 60, 60)

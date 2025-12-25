@@ -258,6 +258,10 @@ class Game:
         shop.run()
         save.save_game(self.make_save_data())
 
+    def open_minigame(self):
+        MiniGameScreen(self.screen, self.state).run()
+        save.save_game(self.make_save_data())
+
     def open_bag(self):
         BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
         save.save_game(self.make_save_data())
@@ -289,10 +293,27 @@ class Game:
         save.save_game(self.make_save_data())
 
     def on_buy_item(self, item):
-        item_id = item["id"]
-        price = item.get("price", 0)
+        if not isinstance(item, dict):
+            return False
+
+        item_id = item.get("id")
+        if not isinstance(item_id, str):
+            return False
+
+        try:
+            price = int(item.get("price", 0))
+        except (TypeError, ValueError):
+            return False
+        if price < 0:
+            return False
+
+        try:
+            self.state.money = max(0, int(self.state.money))
+        except (TypeError, ValueError):
+            self.state.money = 0
+
         if self.state.money < price:
-            return
+            return False
         self.state.money -= price
         
         if item_id == "bab":
@@ -313,6 +334,7 @@ class Game:
             self.inventory["뼈"] = self.inventory.get("뼈", 0) + 1
         
         save.save_game(self.make_save_data())
+        return True
 
     def handle_click_main(self, pos):
         center_x = (WIDTH - BOTTOM_BTN_W) // 2
@@ -383,7 +405,7 @@ class Game:
                 return
 
             labels = ["설정", "미니게임", "상점", "가방"]
-            actions = [self.open_settings, lambda: MiniGameScreen(self.screen, self.state).run(), self.open_shop, self.open_bag]
+            actions = [self.open_settings, self.open_minigame, self.open_shop, self.open_bag]
             for i in range(4):
                 r = pygame.Rect(
                     panel_x,

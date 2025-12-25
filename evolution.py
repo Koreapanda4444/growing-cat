@@ -29,7 +29,9 @@ def can_evolve(cat, day, coin, has_meat=False, has_bone=False):
         return False, f"코인 {cost} 필요"
 
     if cat.stage == BABY:
-        return (day >= 14, "14일 필요")
+        if day < 14:
+            return False, "14일 필요"
+        return True, "진화 가능"
 
     if cat.stage == ADULT:
         if day < 30 or not has_meat:

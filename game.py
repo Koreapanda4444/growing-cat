@@ -60,8 +60,16 @@ class MiniGameScreen:
                     if getattr(self.state, "minigame_used", {}).get("jump"):
                         return
                     result = CatRunGame(self.screen, self.state).run()
-                    if result and result.get("coins"):
-                        self.state.money += result["coins"]
+                    if result and self.state:
+                        try:
+                            coins = int(result.get("coins", 0))
+                        except (TypeError, ValueError):
+                            coins = 0
+                        coins = max(0, coins)
+                        try:
+                            self.state.money = max(0, int(self.state.money) + coins)
+                        except (TypeError, ValueError):
+                            self.state.money = coins
                     self.state.minigame_used["jump"] = True
                 elif self.selected == "memory" and self.state:
                     if getattr(self.state, "minigame_used", {}).get("memory"):
