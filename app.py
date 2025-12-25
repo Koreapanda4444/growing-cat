@@ -7,6 +7,7 @@ import state
 from game import MiniGameScreen
 from shop import ShopUI
 from bag import BagUI
+from minigames.memory_game import MemoryGame
 import save
 
 
@@ -211,7 +212,6 @@ class Game:
 
     def open_shop(self):
         ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound).run()
-        # 상점 종료 후 갱신
         self.state.money = self.state.money
         save.save_game(self.make_save_data())
 
@@ -263,10 +263,9 @@ class Game:
             BOTTOM_BTN_H
         )
         if minigame_rect.collidepoint(pos):
-            MiniGameScreen(self.screen).run()
+            MiniGameScreen(self.screen, self.state).run()
             return
 
-        # 가방 버튼
         bag_rect = pygame.Rect(
             start_x + 2 * (BOTTOM_BTN_W + BOTTOM_GAP),
             BOTTOM_BTN_Y,

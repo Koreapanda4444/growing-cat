@@ -1,0 +1,227 @@
+import pygame
+import random
+import os
+
+WIDTH = 400
+HEIGHT = 600
+
+GRID_COLS = 4
+GRID_ROWS = 4
+CARD_SIZE = 72
+CARD_GAP = 10
+
+BOARD_X = 30
+BOARD_Y = 90
+
+ASSET_DIRS = [
+    os.path.join("assets", "minigames", "memory_game"),
+]
+FONT_PATH = os.path.join("assets", "fonts", "ThinDungGeunMo.ttf")
+
+class MemoryGame:
+    def __init__(self, screen, state):
+        self.screen = screen
+        self.state = state
+        self.clock = pygame.time.Clock()
+        self.running = True
+
+        try:
+            self.font = pygame.font.Font(FONT_PATH, 22)
+            self.small_font = pygame.font.Font(FONT_PATH, 16)
+        except:
+            self.font = pygame.font.Font(None, 22)
+            self.small_font = pygame.font.Font(None, 16)
+
+        self.cards = []
+        self.first = None
+        self.second = None
+        self.lock = False
+        self.fail_count = 0
+        
+        # 레이아웃(카드를 아래로 내리고, 공간을 꽉 채우도록 동적 크기 계산)
+        self.board_margin_x = 20
+        self.board_top = 140
+        self.board_bottom = HEIGHT - 60
+        self.card_gap = 12
+        avail_w = WIDTH - 2 * self.board_margin_x
+        avail_h = self.board_bottom - self.board_top
+        card_w = (avail_w - (GRID_COLS - 1) * self.card_gap) / GRID_COLS
+        card_h = (avail_h - (GRID_ROWS - 1) * self.card_gap) / GRID_ROWS
+        self.card_size = int(min(card_w, card_h))
+        used_w = GRID_COLS * self.card_size + (GRID_COLS - 1) * self.card_gap
+        used_h = GRID_ROWS * self.card_size + (GRID_ROWS - 1) * self.card_gap
+        # 중앙 정렬
+        self.board_x = (WIDTH - used_w) // 2
+        self.board_y = self.board_top + (avail_h - used_h) // 2
+        self.started = False  # 초기 3초 공개 동안 클릭 차단
+        self.reveal_end_ms = None
+        self.limit_start_ms = None
+        self.time_limit_ms = 30000
+
+        # 카드 뒷면 이미지 로드
+        self.back_image = None
+        for base in ASSET_DIRS:
+            back_path = os.path.join(base, "memoryback.png")
+            if os.path.exists(back_path):
+                try:
+                    img = pygame.image.load(back_path).convert_alpha()
+                    self.back_image = pygame.transform.smoothscale(img, (self.card_size, self.card_size))
+                    break
+                except:
+                    self.back_image = None
+        if self.back_image is None:
+            self.back_image = pygame.Surface((self.card_size, self.card_size))
+            self.back_image.fill((180, 180, 180))
+
+        self.load_cards()
+
+    def load_cards(self):
+        all_ids = list(range(1, 17))
+        chosen = random.sample(all_ids, 8)
+
+        # 색상 팔레트 (이미지 없을 때 대체)
+        colors = [
+            (255, 100, 100), (100, 255, 100), (100, 100, 255), (255, 255, 100),
+            (255, 100, 255), (100, 255, 255), (255, 150, 100), (150, 100, 255)
+        ]
+
+        images = {}
+        for idx, cid in enumerate(chosen):
+            img_surface = None
+            # 여러 경로 중 존재하는 이미지 먼저 사용
+            for base in ASSET_DIRS:
+                path = os.path.join(base, f"memory{cid}.png")
+                if os.path.exists(path):
+                    try:
+                        img_surface = pygame.image.load(path).convert_alpha()
+                        img_surface = pygame.transform.smoothscale(img_surface, (self.card_size, self.card_size))
+                        break
+                    except:
+                        img_surface = None
+            # 이미지가 없거나 로드 실패 시 색상 Surface 대체
+            if img_surface is None:
+                img_surface = pygame.Surface((self.card_size, self.card_size))
+                img_surface.fill(colors[idx % len(colors)])
+            images[cid] = img_surface
+
+        ids = chosen * 2
+        random.shuffle(ids)
+
+        self.cards.clear()
+        for i, cid in enumerate(ids):
+            x = self.board_x + (i % GRID_COLS) * (self.card_size + self.card_gap)
+            y = self.board_y + (i // GRID_COLS) * (self.card_size + self.card_gap)
+
+            self.cards.append({
+                "id": cid,
+                "image": images[cid],
+                "rect": pygame.Rect(x, y, self.card_size, self.card_size),
+                "revealed": True,  # 시작 시 앞면 공개
+                "matched": False
+            })
+
+        # 3초 뒤집기 예약
+        now = pygame.time.get_ticks()
+        self.reveal_end_ms = now + 3000
+
+    def handle_click(self, pos):
+        if self.lock or not self.started:
+            return
+
+        for card in self.cards:
+            if (
+                card["rect"].collidepoint(pos)
+                and not card["revealed"]
+                and not card["matched"]
+            ):
+                card["revealed"] = True
+
+                if not self.first:
+                    self.first = card
+                elif not self.second:
+                    self.second = card
+                    self.check_match()
+                break
+
+    def check_match(self):
+        if self.first["id"] == self.second["id"]:
+            self.first["matched"] = True
+            self.second["matched"] = True
+            self.first = None
+            self.second = None
+        else:
+            self.lock = True
+            self.fail_count += 1
+            pygame.time.set_timer(pygame.USEREVENT, 700)
+
+    def update(self):
+        # 초기 3초 뒤집기 처리
+        now = pygame.time.get_ticks()
+        if not self.started and self.reveal_end_ms and now >= self.reveal_end_ms:
+            for c in self.cards:
+                if not c["matched"]:
+                    c["revealed"] = False
+            self.started = True
+            self.limit_start_ms = now
+
+        # 승리 체크
+        if all(c["matched"] for c in self.cards):
+            reward = 50 if self.fail_count == 0 else 30
+            self.state.money += reward
+            self.running = False
+            return
+
+        # 시간 제한 체크 (15초)
+        if self.started and self.limit_start_ms and now - self.limit_start_ms > self.time_limit_ms:
+            # 시간 초과: 보상 없음, 종료
+            self.running = False
+
+    def draw(self):
+        self.screen.fill((245, 245, 245))
+
+        title = self.font.render("메모리 게임", True, (0, 0, 0))
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 30))
+
+        info = self.small_font.render(
+            f"실수 횟수: {self.fail_count}", True, (80, 80, 80)
+        )
+        self.screen.blit(info, (20, 60))
+
+        # 남은 시간 표시
+        if self.started and self.limit_start_ms:
+            now = pygame.time.get_ticks()
+            remain_ms = max(0, self.time_limit_ms - (now - self.limit_start_ms))
+            remain_s = round(remain_ms / 1000, 1)
+            t = self.small_font.render(f"남은 시간: {remain_s}초", True, (120, 80, 80))
+            self.screen.blit(t, (WIDTH - t.get_width() - 20, 60))
+
+        for card in self.cards:
+            # 윤곽선 없이 카드 이미지만 꽉 차게 표시
+            if card["revealed"] or card["matched"]:
+                self.screen.blit(card["image"], (card["rect"].x, card["rect"].y))
+            else:
+                self.screen.blit(self.back_image, (card["rect"].x, card["rect"].y))
+
+        pygame.display.flip()
+
+    def run(self):
+        while self.running:
+            self.clock.tick(60)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    self.handle_click(event.pos)
+
+                elif event.type == pygame.USEREVENT:
+                    self.first["revealed"] = False
+                    self.second["revealed"] = False
+                    self.first = None
+                    self.second = None
+                    self.lock = False
+                    pygame.time.set_timer(pygame.USEREVENT, 0)
+
+            self.update()
+            self.draw()

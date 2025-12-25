@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+from minigames.memory_game import MemoryGame
 
 WIDTH = 400
 HEIGHT = 600
@@ -11,8 +12,9 @@ FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:
-    def __init__(self, screen):
+    def __init__(self, screen, state=None):
         self.screen = screen
+        self.state = state
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -53,6 +55,8 @@ class MiniGameScreen:
             self.selected = "memory"
         elif self.btn_start.collidepoint(pos):
             if self.selected:
+                if self.selected == "memory" and self.state:
+                    MemoryGame(self.screen, self.state).run()
                 self.running = False
 
     def draw_card(self, rect, title, selected=False):
