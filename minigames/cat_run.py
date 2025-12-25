@@ -44,13 +44,11 @@ class CatRunGame:
             obs_lemon = pygame.image.load(os.path.join(ASSET_DIRS[0], "lemon.png")).convert_alpha()
             obs_orange = pygame.image.load(os.path.join(ASSET_DIRS[0], "orange.png")).convert_alpha()
             obs_water = pygame.image.load(os.path.join(ASSET_DIRS[0], "water.png")).convert_alpha()
-            # 요청 크기: 귤 25x25, 레몬 40x35, 물 60x30
             small_orange = pygame.transform.scale(obs_orange, (25, 25))
             medium_lemon = pygame.transform.scale(obs_lemon, (40, 35))
             large_water = pygame.transform.scale(obs_water, (60, 30))
             self.obstacle_imgs = [small_orange, medium_lemon, large_water]
         except:
-            # 이미지 로드 실패 시 요청 크기에 맞춘 대체 도형 생성
             small_orange = pygame.Surface((25, 25))
             small_orange.fill((255, 150, 0))
             medium_lemon = pygame.Surface((40, 35))
@@ -69,31 +67,24 @@ class CatRunGame:
         self.gravity = 0.8
         self.jump_power = -15
         self.on_ground = True
-        # 이단점프 처리 변수
         self.jump_count = 0
         self.max_jumps = 2
-
-        # 대쉬 제거됨
-
         self.obstacles = []
-        # 시작 속도 낮춤: 기본 장애물 속도를 더 낮게 설정
-        self.base_obstacle_speed = 3.0
+        self.base_obstacle_speed = 4.0
         self.obstacle_speed = self.base_obstacle_speed
         self.spawn_timer = 0
-        self.spawn_delay = 90  # 기존 값은 유지하지만, 아래 랜덤 간격 로직을 사용
-        # 장애물 간격을 5~15m로 랜덤화하기 위한 설정
-        self.min_spawn_meters = 15
-        self.max_spawn_meters = 30
+        self.spawn_delay = 90
+        self.min_spawn_meters = 20
+        self.max_spawn_meters = 40
         self.pixels_per_meter = 10
         self.next_spawn_frames = self._compute_next_spawn_frames()
 
-        self.distance = 0
+        self.distance = 0.0
         self.score = 0
 
     def update_difficulty(self):
-        # 진행 거리 기반 난이도 조정
-        difficulty_level = self.distance // 100
-        self.obstacle_speed = self.base_obstacle_speed + (difficulty_level * 0.5)
+        difficulty_level = int(self.distance) // 100
+        self.obstacle_speed = self.base_obstacle_speed + (difficulty_level * 1.0)
         self.spawn_delay = max(50, 90 - (difficulty_level * 5))
 
     def handle_events(self):
@@ -117,35 +108,31 @@ class CatRunGame:
         if self.bg_x2 <= -WIDTH:
             self.bg_x2 = WIDTH
 
+        self.distance += self.obstacle_speed / self.pixels_per_meter
+
         self.cat_vel_y += self.gravity
         self.cat_y += self.cat_vel_y
         if self.cat_y >= GROUND_Y:
             self.cat_y = GROUND_Y
             self.cat_vel_y = 0
             self.on_ground = True
-            # 착지 시 점프 카운트 초기화
             self.jump_count = 0
 
-        # 대쉬 제거: 수평 이동 및 쿨다운 로직 삭제
-
         cat_rect = pygame.Rect(self.cat_x, self.cat_y, 48, 48)
-
-        # 장애물 스폰: 5~15m 사이 랜덤 간격을 프레임로 환산하여 사용
         self.spawn_timer += 1
         if self.spawn_timer >= self.next_spawn_frames:
             self.spawn_timer = 0
             img = random.choice(self.obstacle_imgs)
             rect = img.get_rect(midbottom=(WIDTH + 40, GROUND_Y + 48))
             self.obstacles.append((img, rect))
-            # 다음 스폰 간격 재계산
             self.next_spawn_frames = self._compute_next_spawn_frames()
         for obs in self.obstacles[:]:
             obs[1].x -= self.obstacle_speed
             if obs[1].right < 0:
                 self.obstacles.remove(obs)
                 self.score += 1
-                self.distance = int(self.score * 10)
-                self.update_difficulty()
+
+            self.update_difficulty()
 
             if cat_rect.colliderect(obs[1]):
                 self.running = False
@@ -159,7 +146,7 @@ class CatRunGame:
         for obs in self.obstacles:
             self.screen.blit(obs[0], obs[1])
 
-        distance_text = self.font.render(f"{self.distance}m", True, (0, 0, 0))
+        distance_text = self.font.render(f"{int(self.distance)}m", True, (0, 0, 0))
         self.screen.blit(distance_text, (10, 10))
 
         speed_text = self.font.render(f"Speed: {self.obstacle_speed:.1f}", True, (0, 0, 0))
@@ -177,16 +164,14 @@ class CatRunGame:
         return self.get_reward()
 
     def get_reward(self):
-        coin_reward = (self.distance // 100) * 10
-        return {"distance": self.distance, "coins": coin_reward}
+        distance_int = int(self.distance)
+        coin_reward = (distance_int // 100) * 10
+        return {"distance": distance_int, "coins": coin_reward}
 
     def _compute_next_spawn_frames(self):
-        # 현재 장애물 속도 기준으로 5~15m를 프레임 수로 환산
         meters = random.randint(self.min_spawn_meters, self.max_spawn_meters)
-        # 속도가 너무 작을 때 division 방지
         speed = max(0.1, self.obstacle_speed)
         frames = int((meters * self.pixels_per_meter) / speed)
-        # 너무 짧은 간격 방지
         return max(10, frames)
 
 

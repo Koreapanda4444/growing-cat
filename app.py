@@ -7,6 +7,7 @@ from game import MiniGameScreen
 from shop import ShopUI
 from bag import BagUI
 import save
+import evolution
 
 
 WIDTH = 400
@@ -110,6 +111,7 @@ class Game:
         self.ending_log = {}
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.evolve_timer = 0
 
         self.load_saved_game()
 
@@ -156,6 +158,23 @@ class Game:
             self.state.money += 5
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+
+        # 진화 체크 (아침에만) - 조건 충족할 때까지 반복 진화
+        evolved = False
+        while True:
+            can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money)
+            if phase == state.MORNING and can_evo:
+                # 진화 비용 차감
+                cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
+                self.state.money -= cost
+                evolution.evolve(self.cat)
+                evolved = True
+            else:
+                break
+
+        if evolved:
+            self.scene = "EVOLVE"
+            self.evolve_timer = 0
 
         self.check_game_over()
         save.save_game(self.make_save_data())
@@ -475,6 +494,11 @@ class Game:
         self.screen.blit(txt, txt.get_rect(center=rect.center))
 
     def draw(self):
+        if self.scene == "EVOLVE":
+            self.draw_evolve()
+            pygame.display.flip()
+            return
+
         if self.scene == "GAME_OVER":
             self.draw_game_over()
             pygame.display.flip()
@@ -558,6 +582,21 @@ class Game:
         self.draw_button(advance_rect, "다음 시간", self.tab_font)
 
         pygame.display.flip()
+
+    def draw_evolve(self):
+        """진화 씬 화면"""
+        self.evolve_timer += 1
+        self.screen.fill((0, 0, 0))
+
+        text1 = self.big_font.render("진화 성공!", True, (255, 255, 255))
+        text2 = self.big_font.render(f"{self.cat.stage}", True, (255, 255, 0))
+
+        self.screen.blit(text1, (WIDTH // 2 - text1.get_width() // 2, 220))
+        self.screen.blit(text2, (WIDTH // 2 - text2.get_width() // 2, 260))
+
+        # 2초(120프레임) 후 MAIN 씬으로 돌아가기
+        if self.evolve_timer > 120:
+            self.scene = "MAIN"
 
 
 if __name__ == "__main__":
