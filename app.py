@@ -69,13 +69,13 @@ class Game:
 
         try:
             self.click_sound = pygame.mixer.Sound(os.path.join(ASSETS_DIR, "sounds", "button.mp3"))
-            self.click_sound.set_volume(0.5)
+            self.click_sound.set_volume(0.25)
         except:
             self.click_sound = None
 
         try:
             pygame.mixer.music.load(os.path.join(ASSETS_DIR, "sounds", "bgm.mp3"))
-            pygame.mixer.music.set_volume(5)
+            pygame.mixer.music.set_volume(1)
             pygame.mixer.music.play(-1)
         except:
             pass
