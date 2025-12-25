@@ -80,6 +80,7 @@ class Game:
         self.state = state.GameState()
         self.cat = None
         self.panel_open = False
+        self.game_over_reason = None
 
     def load_image(self, filename):
         path = os.path.join(ASSETS_DIR, filename)
@@ -104,6 +105,14 @@ class Game:
             self.cat.on_night()
         else:
             self.cat.on_morning()
+
+        self.check_game_over()
+
+    def check_game_over(self):
+        result = self.cat.check_game_over()
+        if result:
+            self.game_over_reason = result
+            self.scene = "GAME_OVER"
 
     def handle_click_main(self, pos):
         start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
@@ -146,6 +155,7 @@ class Game:
                 )
                 if r.collidepoint(pos):
                     actions[i]()
+                    self.check_game_over()
                     return
 
     def handle_events(self):
@@ -159,6 +169,10 @@ class Game:
                         self.input_name += ch
 
             elif event.type == pygame.KEYDOWN:
+                if self.scene == "GAME_OVER":
+                    if event.key == pygame.K_ESCAPE:
+                        self.running = False
+
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
 
@@ -211,6 +225,22 @@ class Game:
         hint = self.hint_font.render("Enter 키를 눌러 확정", True, (120, 120, 120))
         self.screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, box_rect.y + 52))
 
+    def draw_game_over(self):
+        self.screen.fill((30, 30, 30))
+
+        if self.game_over_reason == "DEAD":
+            msg = "고양이가 죽었습니다…"
+        else:
+            msg = "고양이가 가출했습니다…"
+
+        title = self.big_font.render("GAME OVER", True, (255, 80, 80))
+        text = self.font.render(msg, True, (220, 220, 220))
+        hint = self.font.render("ESC 키를 눌러 종료", True, (180, 180, 180))
+
+        self.screen.blit(title, title.get_rect(center=(WIDTH//2, 230)))
+        self.screen.blit(text, text.get_rect(center=(WIDTH//2, 280)))
+        self.screen.blit(hint, hint.get_rect(center=(WIDTH//2, 330)))
+
     def draw_button(self, rect, text, font):
         pygame.draw.rect(self.screen, (220, 220, 220), rect)
         pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
@@ -218,6 +248,11 @@ class Game:
         self.screen.blit(txt, txt.get_rect(center=rect.center))
 
     def draw(self):
+        if self.scene == "GAME_OVER":
+            self.draw_game_over()
+            pygame.display.flip()
+            return
+
         if self.scene == "NAMING":
             self.draw_naming()
             pygame.display.flip()

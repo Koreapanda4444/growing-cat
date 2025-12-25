@@ -1,0 +1,1 @@
+        self.screen.blit(self.back_image, self.back_rect)
