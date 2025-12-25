@@ -8,6 +8,7 @@ class GameState:
     def __init__(self):
         self.day = 1
         self.time_phase = MORNING
+        self.money = 0
 
     def advance_time(self):
         if self.time_phase == MORNING:

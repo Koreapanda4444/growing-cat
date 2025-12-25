@@ -6,9 +6,9 @@ DINO = "공룡고양이"
 EVOLUTION_ORDER = [BABY, ADULT, LION, DINO]
 
 EVOLUTION_COST = {
-    BABY: 50,
-    ADULT: 250,
-    LION: 500,
+    BABY: 100,
+    ADULT: 500,
+    LION: 1000,
 }
 
 def get_next_stage(stage):

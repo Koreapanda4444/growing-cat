@@ -60,6 +60,12 @@ class Game:
         self.back_image = pygame.transform.scale(self.back_image, (WIDTH, HEIGHT))
         self.back_rect = self.back_image.get_rect(topleft=(0, 0))
 
+        try:
+            self.coin_image = pygame.image.load(os.path.join(ASSETS_DIR, "ui", "coin.png")).convert_alpha()
+            self.coin_image = pygame.transform.smoothscale(self.coin_image, (36, 36))
+        except:
+            self.coin_image = None
+
         pygame.font.init()
         try:
             self.font = pygame.font.Font(FONT_PATH, 18)
@@ -69,6 +75,7 @@ class Game:
             self.tab_font = pygame.font.Font(FONT_PATH, 18)
             self.stat_font = pygame.font.Font(FONT_PATH, 16)
             self.hint_font = pygame.font.Font(FONT_PATH, 16)
+            self.coin_font = pygame.font.Font(FONT_PATH, 20)
         except:
             self.font = pygame.font.Font(None, 18)
             self.name_font = pygame.font.Font(None, 18)
@@ -77,6 +84,7 @@ class Game:
             self.tab_font = pygame.font.Font(None, 18)
             self.stat_font = pygame.font.Font(None, 16)
             self.hint_font = pygame.font.Font(None, 16)
+            self.coin_font = pygame.font.Font(None, 20)
 
         self.state = state.GameState()
         self.cat = None
@@ -99,6 +107,7 @@ class Game:
             self.cat.happiness = cat_data["happiness"]
             self.cat.cleanliness = cat_data["cleanliness"]
             
+            self.state.money = data.get("money", 0)
             self.scene = "MAIN"
 
     def load_image(self, filename):
@@ -124,6 +133,7 @@ class Game:
             self.cat.on_night()
         else:
             self.cat.on_morning()
+            self.state.money += 5
 
         self.check_game_over()
         save.save_game(self.make_save_data())
@@ -154,6 +164,7 @@ class Game:
         return {
             "day": self.state.day,
             "time_phase": self.state.time_phase,
+            "money": self.state.money,
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
@@ -163,6 +174,12 @@ class Game:
                 "cleanliness": self.cat.cleanliness
             }
         }
+
+    def spend_money(self, amount):
+        if self.state.money >= amount:
+            self.state.money -= amount
+            return True
+        return False
 
     def open_settings(self):
         from settings import SettingsScreen
@@ -234,6 +251,7 @@ class Game:
                         self.running = False
                     elif event.key == pygame.K_r:
                         self.restart_game()
+                        return
 
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
@@ -356,6 +374,15 @@ class Game:
 
         info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
         self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
+
+        money = getattr(self.state, "money", 0)
+        if self.coin_image:
+            self.screen.blit(self.coin_image, (INFO_X, INFO_Y + 22))
+            coin_text = self.coin_font.render(f"{money}", True, (0, 0, 0))
+            self.screen.blit(coin_text, (INFO_X + 42, INFO_Y + 28))
+        else:
+            coin_text = self.coin_font.render(f"🪙 {money}", True, (0, 0, 0))
+            self.screen.blit(coin_text, (INFO_X, INFO_Y + 22))
 
         self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
         self.draw_bar(STAT_X, STAT_Y_START + STAT_GAP, "피로", self.cat.tiredness, (100, 100, 255))
