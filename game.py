@@ -57,16 +57,23 @@ class MiniGameScreen:
         elif self.btn_start.collidepoint(pos):
             if self.selected:
                 if self.selected == "jump" and self.state:
+                    if getattr(self.state, "minigame_used", {}).get("jump"):
+                        return
                     result = CatRunGame(self.screen, self.state).run()
-                    # 코인 보상 처리
                     if result and result.get("coins"):
                         self.state.money += result["coins"]
+                    self.state.minigame_used["jump"] = True
                 elif self.selected == "memory" and self.state:
+                    if getattr(self.state, "minigame_used", {}).get("memory"):
+                        return
                     MemoryGame(self.screen, self.state).run()
+                    self.state.minigame_used["memory"] = True
                 self.running = False
 
-    def draw_card(self, rect, title, selected=False):
-        color = (200, 220, 200) if selected else (220, 220, 220)
+    def draw_card(self, rect, title, selected=False, disabled=False):
+        color = (220, 220, 220)
+        if selected:
+            color = (200, 220, 200) if not disabled else (220, 120, 120)
         pygame.draw.rect(self.screen, color, rect)
         pygame.draw.rect(self.screen, (0, 0, 0), rect, 2)
         txt = self.font.render(title, True, (0, 0, 0))
@@ -81,8 +88,10 @@ class MiniGameScreen:
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_close, 1)
         self.screen.blit(self.font.render("X", True, (0, 0, 0)), self.font.render("X", True, (0, 0, 0)).get_rect(center=self.btn_close.center))
 
-        self.draw_card(self.card_avoid, "장애물 피하기", self.selected == "jump")
-        self.draw_card(self.card_memory, "메모리 게임", self.selected == "memory")
+        used_jump = getattr(self.state, "minigame_used", {}).get("jump", False) if self.state else False
+        used_memory = getattr(self.state, "minigame_used", {}).get("memory", False) if self.state else False
+        self.draw_card(self.card_avoid, "장애물 피하기", self.selected == "jump", used_jump)
+        self.draw_card(self.card_memory, "메모리 게임", self.selected == "memory", used_memory)
 
         pygame.draw.rect(self.screen, (200, 200, 200), self.btn_start)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_start, 1)

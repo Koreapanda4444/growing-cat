@@ -142,7 +142,6 @@ class ShopUI:
             pygame.draw.rect(self.screen, (220, 220, 220), icon_rect)
             pygame.draw.rect(self.screen, BORDER, icon_rect, 2)
 
-            # 이미지 로드 및 표시
             try:
                 img = pygame.image.load(item["image"]).convert_alpha()
                 img = pygame.transform.scale(img, (size - 4, size - 4))

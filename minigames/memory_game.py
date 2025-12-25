@@ -157,7 +157,7 @@ class MemoryGame:
             self.limit_start_ms = now
 
         if all(c["matched"] for c in self.cards):
-            reward = 50 if self.fail_count == 0 else 30
+            reward = max(10, 100 - 10 * self.fail_count)
             self.state.money += reward
             self.running = False
             return

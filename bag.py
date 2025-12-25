@@ -29,7 +29,6 @@ class BagUI:
         self.close_rect = pygame.Rect(360, 10, 30, 30)
         self.item_rects = []
 
-        # 아이템 정보 맵
         self.item_info = {
             "bab": {"name": "밥", "image": "assets/foods/bab.png"},
             "fish": {"name": "생선", "image": "assets/foods/fish.png"},
@@ -111,7 +110,6 @@ class BagUI:
             pygame.draw.rect(self.screen, (220, 220, 220), icon_rect)
             pygame.draw.rect(self.screen, BORDER, icon_rect, 2)
 
-            # 이미지 로드 및 표시
             item_info = self.item_info.get(item_id, {})
             try:
                 img = pygame.image.load(item_info.get("image", "")).convert_alpha()

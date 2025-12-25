@@ -111,6 +111,8 @@ class Game:
         self.ending_log = {}
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        if not hasattr(self.state, "minigame_used"):
+            self.state.minigame_used = {"jump": False, "memory": False}
         self.evolve_timer = 0
 
         self.load_saved_game()
@@ -130,6 +132,7 @@ class Game:
             
             self.state.money = data.get("money", 0)
             self.inventory = data.get("inventory", {})
+            self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False})
             self.scene = "MAIN"
 
     def load_image(self, filename):
@@ -158,15 +161,14 @@ class Game:
             self.state.money += 5
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.state.minigame_used = {"jump": False, "memory": False}
 
-        # 진화 체크 (아침에만) - 조건 충족할 때까지 반복 진화
         evolved = False
         while True:
             has_meat = self.inventory.get("고기", 0) > 0
             has_bone = self.inventory.get("뼈", 0) > 0
             can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone)
             if phase == state.MORNING and can_evo:
-                # 진화 비용 차감
                 cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
                 self.state.money -= cost
                 evolution.evolve(self.cat)
@@ -212,6 +214,7 @@ class Game:
             "time_phase": self.state.time_phase,
             "money": self.state.money,
             "inventory": self.inventory,
+            "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False}),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
@@ -246,31 +249,25 @@ class Game:
         save.save_game(self.make_save_data())
 
     def use_item(self, item):
-        """가방에서 아이템 사용"""
-        if item == "밥":
-            self.cat.hunger = max(0, self.cat.hunger - 40)
+        if item == "사료":
+            self.cat.hunger = max(0, self.cat.hunger - 30)
         elif item == "생선":
-            self.cat.hunger = max(0, self.cat.hunger - 35)
-        elif item == "츄르":
-            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 30)
-        elif item == "고기":
             self.cat.hunger = max(0, self.cat.hunger - 50)
-        elif item == "풀밭":
+        elif item == "츄르":
+            self.cat.hunger = max(0, self.cat.hunger - 30)
+        elif item == "강아지풀":
             self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 20)
         elif item == "낚싯대":
-            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 25)
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 35)
         elif item == "실":
-            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 15)
-        elif item == "뼈":
-            self.cat.hunger = max(0, self.cat.hunger - 60)
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 25)
 
     def on_buy_item(self, item):
-        """상점에서 아이템 구매 시 호출되는 콜백"""
         item_id = item["id"]
         item_name = item["name"]
         
         if item_id == "bab":
-            self.inventory["밥"] = self.inventory.get("밥", 0) + 1
+            self.inventory["사료"] = self.inventory.get("사료", 0) + 1
         elif item_id == "fish":
             self.inventory["생선"] = self.inventory.get("생선", 0) + 1
         elif item_id == "chur":
@@ -278,7 +275,7 @@ class Game:
         elif item_id == "meat":
             self.inventory["고기"] = self.inventory.get("고기", 0) + 1
         elif item_id == "doggrass":
-            self.inventory["풀밭"] = self.inventory.get("풀밭", 0) + 1
+            self.inventory["강아지풀"] = self.inventory.get("강아지풀", 0) + 1
         elif item_id == "fishing":
             self.inventory["낚싯대"] = self.inventory.get("낚싯대", 0) + 1
         elif item_id == "string":
@@ -601,7 +598,6 @@ class Game:
         pygame.display.flip()
 
     def draw_evolve(self):
-        """진화 씬 화면"""
         self.evolve_timer += 1
         self.screen.fill((0, 0, 0))
 
@@ -611,7 +607,6 @@ class Game:
         self.screen.blit(text1, (WIDTH // 2 - text1.get_width() // 2, 220))
         self.screen.blit(text2, (WIDTH // 2 - text2.get_width() // 2, 260))
 
-        # 2초(120프레임) 후 MAIN 씬으로 돌아가기
         if self.evolve_timer > 120:
             self.scene = "MAIN"
 
