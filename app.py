@@ -5,6 +5,7 @@ import os
 from cat import Cat
 import state
 from game import MiniGameScreen
+import save
 
 
 WIDTH = 400
@@ -83,6 +84,23 @@ class Game:
         self.game_over_reason = None
         self.ending_log = {}
 
+        self.load_saved_game()
+
+    def load_saved_game(self):
+        data = save.load_game()
+        if data and "cat" in data:
+            self.state.day = data["day"]
+            self.state.time_phase = data["time_phase"]
+            
+            cat_data = data["cat"]
+            self.cat = Cat(cat_data["name"], cat_data["stage"])
+            self.cat.hunger = cat_data["hunger"]
+            self.cat.tiredness = cat_data["tiredness"]
+            self.cat.happiness = cat_data["happiness"]
+            self.cat.cleanliness = cat_data["cleanliness"]
+            
+            self.scene = "MAIN"
+
     def load_image(self, filename):
         path = os.path.join(ASSETS_DIR, filename)
         try:
@@ -108,6 +126,7 @@ class Game:
             self.cat.on_morning()
 
         self.check_game_over()
+        save.save_game(self.make_save_data())
 
     def check_game_over(self):
         result = self.cat.check_game_over()
@@ -130,6 +149,24 @@ class Game:
         self.panel_open = False
         self.game_over_reason = None
         self.ending_log = {}
+
+    def make_save_data(self):
+        return {
+            "day": self.state.day,
+            "time_phase": self.state.time_phase,
+            "cat": {
+                "name": self.cat.name,
+                "stage": self.cat.stage,
+                "hunger": self.cat.hunger,
+                "tiredness": self.cat.tiredness,
+                "happiness": self.cat.happiness,
+                "cleanliness": self.cat.cleanliness
+            }
+        }
+
+    def open_settings(self):
+        from settings import SettingsScreen
+        SettingsScreen(self.screen, self.restart_game).run()
 
     def handle_click_main(self, pos):
         start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
@@ -160,10 +197,10 @@ class Game:
                 self.panel_open = False
                 return
 
-            labels = ["밥", "놀기", "씻기", "잠자기"]
-            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.advance_time]
+            labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
+            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.advance_time, self.open_settings]
 
-            for i in range(4):
+            for i in range(5):
                 r = pygame.Rect(
                     panel_x,
                     PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
@@ -171,13 +208,19 @@ class Game:
                     PANEL_BTN_H
                 )
                 if r.collidepoint(pos):
-                    actions[i]()
-                    self.check_game_over()
+                    if i == 4:
+                        self.open_settings()
+                    elif self.cat:
+                        actions[i]()
+                        save.save_game(self.make_save_data())
+                        self.check_game_over()
                     return
 
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                if self.scene == "MAIN" and self.cat:
+                    save.save_game(self.make_save_data())
                 self.running = False
 
             elif event.type == pygame.TEXTINPUT and self.scene == "NAMING":
@@ -245,13 +288,11 @@ class Game:
         self.screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, box_rect.y + 52))
 
     def draw_game_over(self):
-        # 배경 + 반투명 오버레이
         self.screen.blit(self.back_image, self.back_rect)
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 140))
         self.screen.blit(overlay, (0, 0))
 
-        # 중앙 라운드 패널
         panel_w, panel_h = 320, 260
         panel_x = WIDTH // 2 - panel_w // 2
         panel_y = 180
@@ -262,7 +303,6 @@ class Game:
         self.screen.blit(panel_surf, (panel_x, panel_y))
         pygame.draw.rect(self.screen, (255, 80, 80), panel_rect, 2, border_radius=12)
 
-        # 타이틀(드랍 섀도)
         title = self.big_font.render("GAME OVER", True, (255, 80, 80))
         shadow = self.big_font.render("GAME OVER", True, (30, 30, 30))
         title_cx = panel_rect.centerx
@@ -270,22 +310,18 @@ class Game:
         self.screen.blit(shadow, shadow.get_rect(center=(title_cx + 1, title_y + 1)))
         self.screen.blit(title, title.get_rect(center=(title_cx, title_y)))
 
-        # 메시지
         msg = "고양이가 죽었습니다…" if self.game_over_reason == "DEAD" else "고양이가 가출했습니다…"
         text = self.font.render(msg, True, (60, 60, 60))
         self.screen.blit(text, text.get_rect(center=(panel_rect.centerx, title_y + 40)))
 
-        # 힌트 두 줄
         hint1 = self.font.render("ESC 키를 눌러 종료", True, (100, 100, 100))
         hint2 = self.font.render("R 키를 눌러 재시작", True, (100, 100, 100))
         self.screen.blit(hint1, hint1.get_rect(center=(panel_rect.centerx, title_y + 72)))
         self.screen.blit(hint2, hint2.get_rect(center=(panel_rect.centerx, title_y + 94)))
 
-        # 구분선
         sep_y = title_y + 108
         pygame.draw.line(self.screen, (220, 220, 220), (panel_x + 16, sep_y), (panel_x + panel_w - 16, sep_y), 1)
 
-        # 엔딩 로그
         log = self.ending_log
         y = sep_y + 14
         for line in [
@@ -345,7 +381,7 @@ class Game:
             close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
             self.draw_button(close_rect, "▶ 닫기", self.panel_font)
 
-            labels = ["밥", "놀기", "씻기", "잠자기"]
+            labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 self.draw_button(r, label, self.panel_font)
