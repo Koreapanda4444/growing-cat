@@ -5,6 +5,7 @@ import os
 from cat import Cat
 import state
 from game import MiniGameScreen
+from shop import ShopUI
 import save
 
 
@@ -203,8 +204,38 @@ class Game:
         from settings import SettingsScreen
         SettingsScreen(self.screen, self.restart_game).run()
 
+    def open_shop(self):
+        ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound).run()
+        # 상점 종료 후 갱신
+        self.state.money = self.state.money
+        save.save_game(self.make_save_data())
+
+    def on_buy_item(self, item):
+        """상점에서 아이템 구매 시 호출되는 콜백"""
+        item_id = item["id"]
+        if item_id == "food":
+            self.cat.hunger = max(0, self.cat.hunger - 30)
+        elif item_id == "toy":
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 25)
+        elif item_id == "clean":
+            self.cat.cleanliness = min(state.MAX_STAT, self.cat.cleanliness + 30)
+        
+        save.save_game(self.make_save_data())
+
     def handle_click_main(self, pos):
         start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
+
+        shop_rect = pygame.Rect(
+            start_x,
+            BOTTOM_BTN_Y,
+            BOTTOM_BTN_W,
+            BOTTOM_BTN_H
+        )
+        if shop_rect.collidepoint(pos):
+            self.play_click_sound()
+            self.open_shop()
+            return
+
         minigame_rect = pygame.Rect(
             start_x + (BOTTOM_BTN_W + BOTTOM_GAP),
             BOTTOM_BTN_Y,

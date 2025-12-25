@@ -1,0 +1,13 @@
+{
+  "day": 1,
+  "time_phase": "morning",
+  "money": 0,
+  "cat": {
+    "name": "x",
+    "stage": "아기고양이",
+    "hunger": 43,
+    "tiredness": 13,
+    "happiness": 62,
+    "cleanliness": 78
+  }
+}
