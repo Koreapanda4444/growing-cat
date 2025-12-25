@@ -37,8 +37,7 @@ class MemoryGame:
         self.second = None
         self.lock = False
         self.fail_count = 0
-        
-        # 레이아웃(카드를 아래로 내리고, 공간을 꽉 채우도록 동적 크기 계산)
+
         self.board_margin_x = 20
         self.board_top = 140
         self.board_bottom = HEIGHT - 60
@@ -50,15 +49,13 @@ class MemoryGame:
         self.card_size = int(min(card_w, card_h))
         used_w = GRID_COLS * self.card_size + (GRID_COLS - 1) * self.card_gap
         used_h = GRID_ROWS * self.card_size + (GRID_ROWS - 1) * self.card_gap
-        # 중앙 정렬
         self.board_x = (WIDTH - used_w) // 2
         self.board_y = self.board_top + (avail_h - used_h) // 2
-        self.started = False  # 초기 3초 공개 동안 클릭 차단
+        self.started = False
         self.reveal_end_ms = None
         self.limit_start_ms = None
         self.time_limit_ms = 30000
 
-        # 카드 뒷면 이미지 로드
         self.back_image = None
         for base in ASSET_DIRS:
             back_path = os.path.join(base, "memoryback.png")
@@ -79,7 +76,6 @@ class MemoryGame:
         all_ids = list(range(1, 17))
         chosen = random.sample(all_ids, 8)
 
-        # 색상 팔레트 (이미지 없을 때 대체)
         colors = [
             (255, 100, 100), (100, 255, 100), (100, 100, 255), (255, 255, 100),
             (255, 100, 255), (100, 255, 255), (255, 150, 100), (150, 100, 255)
@@ -88,7 +84,6 @@ class MemoryGame:
         images = {}
         for idx, cid in enumerate(chosen):
             img_surface = None
-            # 여러 경로 중 존재하는 이미지 먼저 사용
             for base in ASSET_DIRS:
                 path = os.path.join(base, f"memory{cid}.png")
                 if os.path.exists(path):
@@ -98,7 +93,6 @@ class MemoryGame:
                         break
                     except:
                         img_surface = None
-            # 이미지가 없거나 로드 실패 시 색상 Surface 대체
             if img_surface is None:
                 img_surface = pygame.Surface((self.card_size, self.card_size))
                 img_surface.fill(colors[idx % len(colors)])
@@ -116,11 +110,10 @@ class MemoryGame:
                 "id": cid,
                 "image": images[cid],
                 "rect": pygame.Rect(x, y, self.card_size, self.card_size),
-                "revealed": True,  # 시작 시 앞면 공개
+                "revealed": True,
                 "matched": False
             })
 
-        # 3초 뒤집기 예약
         now = pygame.time.get_ticks()
         self.reveal_end_ms = now + 3000
 
@@ -155,7 +148,6 @@ class MemoryGame:
             pygame.time.set_timer(pygame.USEREVENT, 700)
 
     def update(self):
-        # 초기 3초 뒤집기 처리
         now = pygame.time.get_ticks()
         if not self.started and self.reveal_end_ms and now >= self.reveal_end_ms:
             for c in self.cards:
@@ -164,16 +156,13 @@ class MemoryGame:
             self.started = True
             self.limit_start_ms = now
 
-        # 승리 체크
         if all(c["matched"] for c in self.cards):
             reward = 50 if self.fail_count == 0 else 30
             self.state.money += reward
             self.running = False
             return
 
-        # 시간 제한 체크 (15초)
         if self.started and self.limit_start_ms and now - self.limit_start_ms > self.time_limit_ms:
-            # 시간 초과: 보상 없음, 종료
             self.running = False
 
     def draw(self):
@@ -187,7 +176,6 @@ class MemoryGame:
         )
         self.screen.blit(info, (20, 60))
 
-        # 남은 시간 표시
         if self.started and self.limit_start_ms:
             now = pygame.time.get_ticks()
             remain_ms = max(0, self.time_limit_ms - (now - self.limit_start_ms))
@@ -196,7 +184,6 @@ class MemoryGame:
             self.screen.blit(t, (WIDTH - t.get_width() - 20, 60))
 
         for card in self.cards:
-            # 윤곽선 없이 카드 이미지만 꽉 차게 표시
             if card["revealed"] or card["matched"]:
                 self.screen.blit(card["image"], (card["rect"].x, card["rect"].y))
             else:

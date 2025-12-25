@@ -88,6 +88,12 @@ class Cat:
         self.happiness -= state.rand_range(state.CLEAN_HAPPINESS_DEC)
         self._clamp_all()
 
+    def sleep(self):
+        if not self._can_act(): return
+        self.tiredness -= state.rand_range(state.FREE_SLEEP_TIREDNESS_DEC)
+        self.happiness += state.rand_range(state.FREE_SLEEP_HAPPINESS_INC)
+        self._clamp_all()
+
     def _can_act(self):
         return self.alive and not self.runaway
 

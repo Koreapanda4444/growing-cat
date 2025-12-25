@@ -39,6 +39,7 @@ PANEL_GAP = 4
 PANEL_Y = 300
 
 ARROW_RECT = pygame.Rect(WIDTH - 34, 300, 24, 44)
+LEFT_ARROW_RECT = pygame.Rect(10, 300, 24, 44)
 
 MAIN_CAT_Y = 450
 NAME_Y_OFFSET = 1
@@ -106,6 +107,7 @@ class Game:
         self.state = state.GameState()
         self.cat = None
         self.panel_open = False
+        self.left_panel_open = False
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
@@ -243,43 +245,21 @@ class Game:
         save.save_game(self.make_save_data())
 
     def handle_click_main(self, pos):
-        start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
-
-        shop_rect = pygame.Rect(
-            start_x,
-            BOTTOM_BTN_Y,
-            BOTTOM_BTN_W,
-            BOTTOM_BTN_H
-        )
-        if shop_rect.collidepoint(pos):
+        center_x = (WIDTH - BOTTOM_BTN_W) // 2
+        advance_rect = pygame.Rect(center_x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
+        if advance_rect.collidepoint(pos):
             self.play_click_sound()
-            self.open_shop()
+            self.advance_time()
             return
 
-        minigame_rect = pygame.Rect(
-            start_x + (BOTTOM_BTN_W + BOTTOM_GAP),
-            BOTTOM_BTN_Y,
-            BOTTOM_BTN_W,
-            BOTTOM_BTN_H
-        )
-        if minigame_rect.collidepoint(pos):
-            MiniGameScreen(self.screen, self.state).run()
+        if (not self.panel_open) and ARROW_RECT.collidepoint(pos):
+            self.play_click_sound()
+            self.panel_open = True
             return
 
-        bag_rect = pygame.Rect(
-            start_x + 2 * (BOTTOM_BTN_W + BOTTOM_GAP),
-            BOTTOM_BTN_Y,
-            BOTTOM_BTN_W,
-            BOTTOM_BTN_H
-        )
-        if bag_rect.collidepoint(pos):
+        if (not self.left_panel_open) and LEFT_ARROW_RECT.collidepoint(pos):
             self.play_click_sound()
-            self.open_bag()
-            return
-
-        if ARROW_RECT.collidepoint(pos):
-            self.play_click_sound()
-            self.panel_open = not self.panel_open
+            self.left_panel_open = True
             return
 
         if self.panel_open:
@@ -297,7 +277,7 @@ class Game:
                 return
 
             labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
-            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.advance_time, self.open_settings]
+            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep, self.open_settings]
 
             for i in range(5):
                 r = pygame.Rect(
@@ -314,6 +294,33 @@ class Game:
                         actions[i]()
                         save.save_game(self.make_save_data())
                         self.check_game_over()
+                    return
+
+        if self.left_panel_open:
+            panel_x = 8
+            left_close_rect = pygame.Rect(
+                panel_x,
+                PANEL_Y - (PANEL_BTN_H + PANEL_GAP),
+                PANEL_W,
+                PANEL_BTN_H
+            )
+            if left_close_rect.collidepoint(pos):
+                self.play_click_sound()
+                self.left_panel_open = False
+                return
+
+            labels = ["상점", "미니게임", "가방"]
+            actions = [self.open_shop, lambda: MiniGameScreen(self.screen, self.state).run(), self.open_bag]
+            for i in range(3):
+                r = pygame.Rect(
+                    panel_x,
+                    PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
+                    PANEL_W,
+                    PANEL_BTN_H
+                )
+                if r.collidepoint(pos):
+                    self.play_click_sound()
+                    actions[i]()
                     return
 
     def handle_events(self):
@@ -480,10 +487,11 @@ class Game:
         name_rect = name_text.get_rect(center=(WIDTH // 2, cat_rect.top - NAME_Y_OFFSET))
         self.screen.blit(name_text, name_rect)
 
-        pygame.draw.rect(self.screen, (220, 220, 220), ARROW_RECT)
-        pygame.draw.rect(self.screen, (0, 0, 0), ARROW_RECT, 1)
-        arrow = self.font.render("◀", True, (0, 0, 0))
-        self.screen.blit(arrow, arrow.get_rect(center=ARROW_RECT.center))
+        if not self.panel_open:
+            pygame.draw.rect(self.screen, (220, 220, 220), ARROW_RECT)
+            pygame.draw.rect(self.screen, (0, 0, 0), ARROW_RECT, 1)
+            arrow = self.font.render("◀", True, (0, 0, 0))
+            self.screen.blit(arrow, arrow.get_rect(center=ARROW_RECT.center))
 
         if self.panel_open:
             panel_x = WIDTH - PANEL_W - 8
@@ -496,12 +504,24 @@ class Game:
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 self.draw_button(r, label, self.panel_font)
 
-        start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
-        labels = ["상점", "미니게임", "가방"]
-        for i, label in enumerate(labels):
-            x = start_x + i * (BOTTOM_BTN_W + BOTTOM_GAP)
-            r = pygame.Rect(x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
-            self.draw_button(r, label, self.tab_font)
+        if not self.left_panel_open:
+            pygame.draw.rect(self.screen, (220, 220, 220), LEFT_ARROW_RECT)
+            pygame.draw.rect(self.screen, (0, 0, 0), LEFT_ARROW_RECT, 1)
+            l_arrow = self.font.render("▶", True, (0, 0, 0))
+            self.screen.blit(l_arrow, l_arrow.get_rect(center=LEFT_ARROW_RECT.center))
+
+        if self.left_panel_open:
+            panel_x = 8
+            left_close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
+            self.draw_button(left_close_rect, "닫기 ◀", self.panel_font)
+            labels = ["상점", "미니게임", "가방"]
+            for i, label in enumerate(labels):
+                r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
+                self.draw_button(r, label, self.panel_font)
+
+        center_x = (WIDTH - BOTTOM_BTN_W) // 2
+        advance_rect = pygame.Rect(center_x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
+        self.draw_button(advance_rect, "다음 시간", self.tab_font)
 
         pygame.display.flip()
 
