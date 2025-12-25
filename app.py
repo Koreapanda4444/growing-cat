@@ -1,7 +1,6 @@
 import pygame
 import sys
 import os
-
 from cat import Cat
 import state
 from game import MiniGameScreen
@@ -160,7 +159,6 @@ class Game:
 
         self.check_game_over()
         save.save_game(self.make_save_data())
-        # 시간대 변경 시 행동 제한 초기화
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
 
     def check_game_over(self):
@@ -293,7 +291,6 @@ class Game:
                     PANEL_BTN_H
                 )
                 if r.collidepoint(pos):
-                    # 이미 사용한 행동은 무시
                     if i < 4 and self.actions_used[keys[i]]:
                         self.play_click_sound()
                         return

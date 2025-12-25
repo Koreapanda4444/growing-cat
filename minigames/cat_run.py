@@ -7,9 +7,9 @@ ASSET_DIRS = [
 ]
 FONT_PATH = os.path.join(ASSET_DIRS[0], "fonts", "ThinDungGeunMo.ttf")
 
-WIDTH, HEIGHT = 400, 300
+WIDTH, HEIGHT = 400, 600
 FPS = 60
-GROUND_Y = 230
+GROUND_Y = 450
 
 
 class CatRunGame:
@@ -41,19 +41,23 @@ class CatRunGame:
 
         self.obstacle_imgs = []
         try:
-            obs1 = pygame.image.load(os.path.join(ASSET_DIRS[0], "lemon.png")).convert_alpha()
-            obs2 = pygame.image.load(os.path.join(ASSET_DIRS[0], "orange.png")).convert_alpha()
-            obs3 = pygame.image.load(os.path.join(ASSET_DIRS[0], "water.png")).convert_alpha()
-            self.obstacle_imgs = [
-                pygame.transform.scale(obs1, (32, 32)),
-                pygame.transform.scale(obs2, (32, 32)),
-                pygame.transform.scale(obs3, (40, 20)),
-            ]
+            obs_lemon = pygame.image.load(os.path.join(ASSET_DIRS[0], "lemon.png")).convert_alpha()
+            obs_orange = pygame.image.load(os.path.join(ASSET_DIRS[0], "orange.png")).convert_alpha()
+            obs_water = pygame.image.load(os.path.join(ASSET_DIRS[0], "water.png")).convert_alpha()
+            # 요청 크기: 귤 25x25, 레몬 40x35, 물 60x30
+            small_orange = pygame.transform.scale(obs_orange, (25, 25))
+            medium_lemon = pygame.transform.scale(obs_lemon, (40, 35))
+            large_water = pygame.transform.scale(obs_water, (60, 30))
+            self.obstacle_imgs = [small_orange, medium_lemon, large_water]
         except:
-            for color in [(255, 200, 0), (255, 150, 0), (0, 150, 255)]:
-                surf = pygame.Surface((32, 32))
-                surf.fill(color)
-                self.obstacle_imgs.append(surf)
+            # 이미지 로드 실패 시 요청 크기에 맞춘 대체 도형 생성
+            small_orange = pygame.Surface((25, 25))
+            small_orange.fill((255, 150, 0))
+            medium_lemon = pygame.Surface((40, 35))
+            medium_lemon.fill((255, 200, 0))
+            large_water = pygame.Surface((60, 30))
+            large_water.fill((0, 150, 255))
+            self.obstacle_imgs = [small_orange, medium_lemon, large_water]
 
         self.bg_x1 = 0
         self.bg_x2 = WIDTH
@@ -63,21 +67,33 @@ class CatRunGame:
         self.cat_y = GROUND_Y
         self.cat_vel_y = 0
         self.gravity = 0.8
-        self.jump_power = -12
+        self.jump_power = -15
         self.on_ground = True
+        # 이단점프 처리 변수
+        self.jump_count = 0
+        self.max_jumps = 2
+
+        # 대쉬 제거됨
 
         self.obstacles = []
-        self.obstacle_speed = 4.0
+        # 시작 속도 낮춤: 기본 장애물 속도를 더 낮게 설정
+        self.base_obstacle_speed = 3.0
+        self.obstacle_speed = self.base_obstacle_speed
         self.spawn_timer = 0
-        self.spawn_delay = 90
+        self.spawn_delay = 90  # 기존 값은 유지하지만, 아래 랜덤 간격 로직을 사용
+        # 장애물 간격을 5~15m로 랜덤화하기 위한 설정
+        self.min_spawn_meters = 15
+        self.max_spawn_meters = 30
+        self.pixels_per_meter = 10
+        self.next_spawn_frames = self._compute_next_spawn_frames()
 
         self.distance = 0
         self.score = 0
 
     def update_difficulty(self):
-
+        # 진행 거리 기반 난이도 조정
         difficulty_level = self.distance // 100
-        self.obstacle_speed = 4.0 + (difficulty_level * 0.5)
+        self.obstacle_speed = self.base_obstacle_speed + (difficulty_level * 0.5)
         self.spawn_delay = max(50, 90 - (difficulty_level * 5))
 
     def handle_events(self):
@@ -87,9 +103,11 @@ class CatRunGame:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
-                if event.key == pygame.K_SPACE and self.on_ground:
-                    self.cat_vel_y = self.jump_power
-                    self.on_ground = False
+                if event.key == pygame.K_SPACE:
+                    if self.jump_count < self.max_jumps:
+                        self.cat_vel_y = self.jump_power
+                        self.on_ground = False
+                        self.jump_count += 1
 
     def update(self):
         self.bg_x1 -= self.bg_speed
@@ -105,15 +123,22 @@ class CatRunGame:
             self.cat_y = GROUND_Y
             self.cat_vel_y = 0
             self.on_ground = True
+            # 착지 시 점프 카운트 초기화
+            self.jump_count = 0
+
+        # 대쉬 제거: 수평 이동 및 쿨다운 로직 삭제
 
         cat_rect = pygame.Rect(self.cat_x, self.cat_y, 48, 48)
 
+        # 장애물 스폰: 5~15m 사이 랜덤 간격을 프레임로 환산하여 사용
         self.spawn_timer += 1
-        if self.spawn_timer > self.spawn_delay:
+        if self.spawn_timer >= self.next_spawn_frames:
             self.spawn_timer = 0
             img = random.choice(self.obstacle_imgs)
             rect = img.get_rect(midbottom=(WIDTH + 40, GROUND_Y + 48))
             self.obstacles.append((img, rect))
+            # 다음 스폰 간격 재계산
+            self.next_spawn_frames = self._compute_next_spawn_frames()
         for obs in self.obstacles[:]:
             obs[1].x -= self.obstacle_speed
             if obs[1].right < 0:
@@ -154,6 +179,15 @@ class CatRunGame:
     def get_reward(self):
         coin_reward = (self.distance // 100) * 10
         return {"distance": self.distance, "coins": coin_reward}
+
+    def _compute_next_spawn_frames(self):
+        # 현재 장애물 속도 기준으로 5~15m를 프레임 수로 환산
+        meters = random.randint(self.min_spawn_meters, self.max_spawn_meters)
+        # 속도가 너무 작을 때 division 방지
+        speed = max(0.1, self.obstacle_speed)
+        frames = int((meters * self.pixels_per_meter) / speed)
+        # 너무 짧은 간격 방지
+        return max(10, frames)
 
 
 if __name__ == "__main__":
