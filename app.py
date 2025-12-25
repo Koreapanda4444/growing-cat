@@ -44,6 +44,7 @@ NAME_Y_OFFSET = 1
 class Game:
     def __init__(self):
         pygame.init()
+        pygame.mixer.init()
         pygame.display.set_caption("고양이 키우기")
         pygame.key.start_text_input()
 
@@ -65,6 +66,19 @@ class Game:
             self.coin_image = pygame.transform.smoothscale(self.coin_image, (36, 36))
         except:
             self.coin_image = None
+
+        try:
+            self.click_sound = pygame.mixer.Sound(os.path.join(ASSETS_DIR, "sounds", "button.mp3"))
+            self.click_sound.set_volume(0.5)
+        except:
+            self.click_sound = None
+
+        try:
+            pygame.mixer.music.load(os.path.join(ASSETS_DIR, "sounds", "bgm.mp3"))
+            pygame.mixer.music.set_volume(5)
+            pygame.mixer.music.play(-1)
+        except:
+            pass
 
         pygame.font.init()
         try:
@@ -181,6 +195,10 @@ class Game:
             return True
         return False
 
+    def play_click_sound(self):
+        if self.click_sound:
+            self.click_sound.play()
+
     def open_settings(self):
         from settings import SettingsScreen
         SettingsScreen(self.screen, self.restart_game).run()
@@ -198,6 +216,7 @@ class Game:
             return
 
         if ARROW_RECT.collidepoint(pos):
+            self.play_click_sound()
             self.panel_open = not self.panel_open
             return
 
@@ -211,6 +230,7 @@ class Game:
                 PANEL_BTN_H
             )
             if close_rect.collidepoint(pos):
+                self.play_click_sound()
                 self.panel_open = False
                 return
 
@@ -225,6 +245,7 @@ class Game:
                     PANEL_BTN_H
                 )
                 if r.collidepoint(pos):
+                    self.play_click_sound()
                     if i == 4:
                         self.open_settings()
                     elif self.cat:
