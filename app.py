@@ -4,6 +4,7 @@ import os
 
 from cat import Cat
 import state
+from game import MiniGameScreen
 
 
 WIDTH = 400
@@ -35,8 +36,8 @@ PANEL_Y = 300
 
 ARROW_RECT = pygame.Rect(WIDTH - 34, 300, 24, 44)
 
-MAIN_CAT_Y = 320
-NAME_Y_OFFSET = 22
+MAIN_CAT_Y = 450
+NAME_Y_OFFSET = 1
 
 
 class Game:
@@ -105,6 +106,17 @@ class Game:
             self.cat.on_morning()
 
     def handle_click_main(self, pos):
+        start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
+        minigame_rect = pygame.Rect(
+            start_x + (BOTTOM_BTN_W + BOTTOM_GAP),
+            BOTTOM_BTN_Y,
+            BOTTOM_BTN_W,
+            BOTTOM_BTN_H
+        )
+        if minigame_rect.collidepoint(pos):
+            MiniGameScreen(self.screen).run()
+            return
+
         if ARROW_RECT.collidepoint(pos):
             self.panel_open = not self.panel_open
             return
@@ -231,14 +243,14 @@ class Game:
 
         pygame.draw.rect(self.screen, (220, 220, 220), ARROW_RECT)
         pygame.draw.rect(self.screen, (0, 0, 0), ARROW_RECT, 1)
-        arrow = self.font.render("▶", True, (0, 0, 0))
+        arrow = self.font.render("◀", True, (0, 0, 0))
         self.screen.blit(arrow, arrow.get_rect(center=ARROW_RECT.center))
 
         if self.panel_open:
             panel_x = WIDTH - PANEL_W - 8
 
             close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
-            self.draw_button(close_rect, "◀ 닫기", self.panel_font)
+            self.draw_button(close_rect, "▶ 닫기", self.panel_font)
 
             labels = ["밥", "놀기", "씻기", "잠자기"]
             for i, label in enumerate(labels):
