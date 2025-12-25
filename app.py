@@ -111,6 +111,7 @@ class Game:
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
+        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
 
         self.load_saved_game()
 
@@ -156,8 +157,12 @@ class Game:
             self.cat.on_morning()
             self.state.money += 5
 
+        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+
         self.check_game_over()
         save.save_game(self.make_save_data())
+        # 시간대 변경 시 행동 제한 초기화
+        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
 
     def check_game_over(self):
         result = self.cat.check_game_over()
@@ -181,6 +186,7 @@ class Game:
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
+        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
 
     def make_save_data(self):
         return {
@@ -278,6 +284,7 @@ class Game:
 
             labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
             actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep, self.open_settings]
+            keys = ["feed", "play", "clean", "sleep", None]
 
             for i in range(5):
                 r = pygame.Rect(
@@ -287,11 +294,17 @@ class Game:
                     PANEL_BTN_H
                 )
                 if r.collidepoint(pos):
+                    # 이미 사용한 행동은 무시
+                    if i < 4 and self.actions_used[keys[i]]:
+                        self.play_click_sound()
+                        return
                     self.play_click_sound()
                     if i == 4:
                         self.open_settings()
                     elif self.cat:
                         actions[i]()
+                        if i < 4:
+                            self.actions_used[keys[i]] = True
                         save.save_game(self.make_save_data())
                         self.check_game_over()
                     return
@@ -449,6 +462,22 @@ class Game:
         txt = font.render(text, True, (0, 0, 0))
         self.screen.blit(txt, txt.get_rect(center=rect.center))
 
+    def draw_button_state(self, rect, text, font, enabled=True):
+        fill = (220, 220, 220) if enabled else (180, 180, 180)
+        text_color = (0, 0, 0) if enabled else (120, 120, 120)
+        pygame.draw.rect(self.screen, fill, rect)
+        pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+        txt = font.render(text, True, text_color)
+        self.screen.blit(txt, txt.get_rect(center=rect.center))
+
+    def draw_button_state(self, rect, text, font, enabled=True):
+        fill = (220, 220, 220) if enabled else (180, 180, 180)
+        text_color = (0, 0, 0) if enabled else (120, 120, 120)
+        pygame.draw.rect(self.screen, fill, rect)
+        pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+        txt = font.render(text, True, text_color)
+        self.screen.blit(txt, txt.get_rect(center=rect.center))
+
     def draw(self):
         if self.scene == "GAME_OVER":
             self.draw_game_over()
@@ -502,7 +531,16 @@ class Game:
             labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
-                self.draw_button(r, label, self.panel_font)
+                if i == 0:
+                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["feed"])
+                elif i == 1:
+                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["play"])
+                elif i == 2:
+                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["clean"])
+                elif i == 3:
+                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["sleep"])
+                else:
+                    self.draw_button_state(r, label, self.panel_font, True)
 
         if not self.left_panel_open:
             pygame.draw.rect(self.screen, (220, 220, 220), LEFT_ARROW_RECT)
