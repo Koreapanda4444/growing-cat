@@ -8,15 +8,15 @@ from shop import ShopUI
 from bag import BagUI
 import save
 import evolution
+from config import asset_path
 
 
 WIDTH = 400
 HEIGHT = 600
 FPS = 60
 
-ASSETS_DIR = "assets"
-BACK_IMAGE = "ui/background.png"
-FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
+BACK_IMAGE = asset_path("ui", "background.png")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 INFO_X = 8
 INFO_Y = 18
@@ -52,6 +52,12 @@ class Game:
         pygame.key.start_text_input()
 
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+        try:
+            icon_surface = pygame.image.load(asset_path("icon", "icon.png")).convert_alpha()
+            pygame.display.set_icon(icon_surface)
+        except:
+            pass
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -65,19 +71,19 @@ class Game:
         self.back_rect = self.back_image.get_rect(topleft=(0, 0))
 
         try:
-            self.coin_image = pygame.image.load(os.path.join(ASSETS_DIR, "ui", "coin.png")).convert_alpha()
+            self.coin_image = pygame.image.load(asset_path("ui", "coin.png")).convert_alpha()
             self.coin_image = pygame.transform.smoothscale(self.coin_image, (36, 36))
         except:
             self.coin_image = None
 
         try:
-            self.click_sound = pygame.mixer.Sound(os.path.join(ASSETS_DIR, "sounds", "button.mp3"))
+            self.click_sound = pygame.mixer.Sound(asset_path("sounds", "button.mp3"))
             self.click_sound.set_volume(0.25)
         except:
             self.click_sound = None
 
         try:
-            pygame.mixer.music.load(os.path.join(ASSETS_DIR, "sounds", "bgm.mp3"))
+            pygame.mixer.music.load(asset_path("sounds", "bgm.mp3"))
             pygame.mixer.music.set_volume(1)
             pygame.mixer.music.play(-1)
         except:
@@ -137,9 +143,8 @@ class Game:
             self.scene = "MAIN"
 
     def load_image(self, filename):
-        path = os.path.join(ASSETS_DIR, filename)
         try:
-            return pygame.image.load(path).convert_alpha()
+            return pygame.image.load(filename).convert_alpha()
         except:
             pygame.quit()
             sys.exit()

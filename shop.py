@@ -1,6 +1,8 @@
 import pygame
 import os
 
+from config import asset_path
+
 WIDTH = 400
 HEIGHT = 600
 
@@ -8,8 +10,7 @@ BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
 BORDER = (0, 0, 0)
 
-ASSETS_DIR = "assets"
-FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 class ShopUI:
     def __init__(self, screen, coin, on_buy, play_click_sound=None):
@@ -35,18 +36,18 @@ class ShopUI:
 
         self.items = {
             "FOOD": [
-                {"name": "밥", "price": 30, "id": "bab", "image": "assets/foods/bab.png"},
-                {"name": "생선", "price": 50, "id": "fish", "image": "assets/foods/fish.png"},
-                {"name": "츄르", "price": 80, "id": "chur", "image": "assets/foods/chur.png"},
+                {"name": "밥", "price": 30, "id": "bab", "image": asset_path("foods", "bab.png")},
+                {"name": "생선", "price": 50, "id": "fish", "image": asset_path("foods", "fish.png")},
+                {"name": "츄르", "price": 80, "id": "chur", "image": asset_path("foods", "chur.png")},
             ],
             "TOY": [
-                {"name": "강아지풀", "price": 30, "id": "doggrass", "image": "assets/toys/doggrass.png"},
-                {"name": "낚싯대", "price": 50, "id": "fishing", "image": "assets/toys/fishing.png"},
-                {"name": "실", "price": 40, "id": "string", "image": "assets/toys/string.png"},
+                {"name": "강아지풀", "price": 30, "id": "doggrass", "image": asset_path("toys", "doggrass.png")},
+                {"name": "낚싯대", "price": 50, "id": "fishing", "image": asset_path("toys", "fishing.png")},
+                {"name": "실", "price": 40, "id": "string", "image": asset_path("toys", "string.png")},
             ],
             "EVOLUTION": [
-                {"name": "고기", "price": 100, "id": "meat", "image": "assets/evolution/meat.png"},
-                {"name": "뼈", "price": 300, "id": "bone", "image": "assets/evolution/bone.png"},
+                {"name": "고기", "price": 100, "id": "meat", "image": asset_path("evolution", "meat.png")},
+                {"name": "뼈", "price": 300, "id": "bone", "image": asset_path("evolution", "bone.png")},
             ]
         }
 

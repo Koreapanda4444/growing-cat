@@ -2,10 +2,11 @@ import pygame
 import random
 import sys
 import os
-ASSET_DIRS = [
-    os.path.join("assets", "minigames", "cat_run"),
-]
-FONT_PATH = os.path.join(ASSET_DIRS[0], "fonts", "ThinDungGeunMo.ttf")
+
+from config import asset_path
+
+ASSET_DIR = asset_path("minigames", "cat_run")
+FONT_PATH = asset_path("minigames", "cat_run", "fonts", "ThinDungGeunMo.ttf")
 
 WIDTH, HEIGHT = 400, 600
 FPS = 60
@@ -26,14 +27,14 @@ class CatRunGame:
             self.font = pygame.font.SysFont(None, 24)
 
         try:
-            self.bg = pygame.image.load(os.path.join(ASSET_DIRS[0], "grass.png")).convert()
+            self.bg = pygame.image.load(os.path.join(ASSET_DIR, "grass.png")).convert()
             self.bg = pygame.transform.scale(self.bg, (WIDTH, HEIGHT))
         except:
             self.bg = pygame.Surface((WIDTH, HEIGHT))
             self.bg.fill((100, 150, 100))
 
         try:
-            self.cat_img = pygame.image.load(os.path.join(ASSET_DIRS[0], "cat.png")).convert_alpha()
+            self.cat_img = pygame.image.load(os.path.join(ASSET_DIR, "cat.png")).convert_alpha()
             self.cat_img = pygame.transform.scale(self.cat_img, (48, 48))
         except:
             self.cat_img = pygame.Surface((48, 48))
@@ -41,9 +42,9 @@ class CatRunGame:
 
         self.obstacle_imgs = []
         try:
-            obs_lemon = pygame.image.load(os.path.join(ASSET_DIRS[0], "lemon.png")).convert_alpha()
-            obs_orange = pygame.image.load(os.path.join(ASSET_DIRS[0], "orange.png")).convert_alpha()
-            obs_water = pygame.image.load(os.path.join(ASSET_DIRS[0], "water.png")).convert_alpha()
+            obs_lemon = pygame.image.load(os.path.join(ASSET_DIR, "lemon.png")).convert_alpha()
+            obs_orange = pygame.image.load(os.path.join(ASSET_DIR, "orange.png")).convert_alpha()
+            obs_water = pygame.image.load(os.path.join(ASSET_DIR, "water.png")).convert_alpha()
             small_orange = pygame.transform.scale(obs_orange, (25, 25))
             medium_lemon = pygame.transform.scale(obs_lemon, (40, 35))
             large_water = pygame.transform.scale(obs_water, (60, 30))

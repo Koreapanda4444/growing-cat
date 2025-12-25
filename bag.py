@@ -1,6 +1,8 @@
 import pygame
 import os
 
+from config import asset_path
+
 WIDTH = 400
 HEIGHT = 600
 
@@ -8,8 +10,7 @@ BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
 BORDER = (0, 0, 0)
 
-ASSETS_DIR = "assets"
-FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 class BagUI:
     def __init__(self, screen, inventory, on_use, play_click_sound=None):
@@ -30,25 +31,25 @@ class BagUI:
         self.item_rects = []
 
         self.item_info = {
-            "bab": {"name": "밥", "image": "assets/foods/bab.png"},
-            "fish": {"name": "생선", "image": "assets/foods/fish.png"},
-            "chur": {"name": "츄르", "image": "assets/foods/chur.png"},
-            "meat": {"name": "고기", "image": "assets/evolution/meat.png"},
-            "doggrass": {"name": "강아지풀", "image": "assets/toys/doggrass.png"},
-            "fishing": {"name": "낚싯대", "image": "assets/toys/fishing.png"},
-            "string": {"name": "실", "image": "assets/toys/string.png"},
-            "bone": {"name": "뼈", "image": "assets/evolution/bone.png"},
+            "bab": {"name": "밥", "image": asset_path("foods", "bab.png")},
+            "fish": {"name": "생선", "image": asset_path("foods", "fish.png")},
+            "chur": {"name": "츄르", "image": asset_path("foods", "chur.png")},
+            "meat": {"name": "고기", "image": asset_path("evolution", "meat.png")},
+            "doggrass": {"name": "강아지풀", "image": asset_path("toys", "doggrass.png")},
+            "fishing": {"name": "낚싯대", "image": asset_path("toys", "fishing.png")},
+            "string": {"name": "실", "image": asset_path("toys", "string.png")},
+            "bone": {"name": "뼈", "image": asset_path("evolution", "bone.png")},
 
-            "사료": {"name": "밥", "image": "assets/foods/bab.png"},
-            "밥": {"name": "밥", "image": "assets/foods/bab.png"},
-            "생선": {"name": "생선", "image": "assets/foods/fish.png"},
-            "츄르": {"name": "츄르", "image": "assets/foods/chur.png"},
-            "고기": {"name": "고기", "image": "assets/evolution/meat.png"},
-            "풀밭": {"name": "강아지풀", "image": "assets/toys/doggrass.png"},
-            "강아지풀": {"name": "강아지풀", "image": "assets/toys/doggrass.png"},
-            "낚싯대": {"name": "낚싯대", "image": "assets/toys/fishing.png"},
-            "실": {"name": "실", "image": "assets/toys/string.png"},
-            "뼈": {"name": "뼈", "image": "assets/evolution/bone.png"},
+            "사료": {"name": "밥", "image": asset_path("foods", "bab.png")},
+            "밥": {"name": "밥", "image": asset_path("foods", "bab.png")},
+            "생선": {"name": "생선", "image": asset_path("foods", "fish.png")},
+            "츄르": {"name": "츄르", "image": asset_path("foods", "chur.png")},
+            "고기": {"name": "고기", "image": asset_path("evolution", "meat.png")},
+            "풀밭": {"name": "강아지풀", "image": asset_path("toys", "doggrass.png")},
+            "강아지풀": {"name": "강아지풀", "image": asset_path("toys", "doggrass.png")},
+            "낚싯대": {"name": "낚싯대", "image": asset_path("toys", "fishing.png")},
+            "실": {"name": "실", "image": asset_path("toys", "string.png")},
+            "뼈": {"name": "뼈", "image": asset_path("evolution", "bone.png")},
         }
 
     def run(self):

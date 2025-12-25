@@ -4,12 +4,13 @@ import os
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 
+from config import asset_path
+
 WIDTH = 400
 HEIGHT = 600
 FPS = 60
 
-ASSETS_DIR = "assets"
-FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "ThinDungGeunMo.ttf")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:

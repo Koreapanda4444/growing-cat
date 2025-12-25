@@ -2,13 +2,13 @@ import state
 import random
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from config import asset_path
 
 CAT_IMAGE_DIR = {
-    "아기고양이": os.path.join(BASE_DIR, "assets", "cats", "baby"),
-    "어른고양이": os.path.join(BASE_DIR, "assets", "cats", "adult"),
-    "사자고양이": os.path.join(BASE_DIR, "assets", "cats", "lion"),
-    "공룡고양이": os.path.join(BASE_DIR, "assets", "cats", "dino"),
+    "아기고양이": asset_path("cats", "baby"),
+    "어른고양이": asset_path("cats", "adult"),
+    "사자고양이": asset_path("cats", "lion"),
+    "공룡고양이": asset_path("cats", "dino"),
 }
 
 class Cat:

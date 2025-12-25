@@ -2,6 +2,8 @@ import pygame
 import random
 import os
 
+from config import asset_path
+
 WIDTH = 400
 HEIGHT = 600
 
@@ -13,10 +15,8 @@ CARD_GAP = 10
 BOARD_X = 30
 BOARD_Y = 90
 
-ASSET_DIRS = [
-    os.path.join("assets", "minigames", "memory_game"),
-]
-FONT_PATH = os.path.join("assets", "fonts", "ThinDungGeunMo.ttf")
+ASSET_DIR = asset_path("minigames", "memory_game")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 class MemoryGame:
     def __init__(self, screen, state):
@@ -57,15 +57,12 @@ class MemoryGame:
         self.time_limit_ms = 30000
 
         self.back_image = None
-        for base in ASSET_DIRS:
-            back_path = os.path.join(base, "memoryback.png")
-            if os.path.exists(back_path):
-                try:
-                    img = pygame.image.load(back_path).convert_alpha()
-                    self.back_image = pygame.transform.smoothscale(img, (self.card_size, self.card_size))
-                    break
-                except:
-                    self.back_image = None
+        back_path = os.path.join(ASSET_DIR, "memoryback.png")
+        try:
+            img = pygame.image.load(back_path).convert_alpha()
+            self.back_image = pygame.transform.smoothscale(img, (self.card_size, self.card_size))
+        except:
+            self.back_image = None
         if self.back_image is None:
             self.back_image = pygame.Surface((self.card_size, self.card_size))
             self.back_image.fill((180, 180, 180))
@@ -84,15 +81,12 @@ class MemoryGame:
         images = {}
         for idx, cid in enumerate(chosen):
             img_surface = None
-            for base in ASSET_DIRS:
-                path = os.path.join(base, f"memory{cid}.png")
-                if os.path.exists(path):
-                    try:
-                        img_surface = pygame.image.load(path).convert_alpha()
-                        img_surface = pygame.transform.smoothscale(img_surface, (self.card_size, self.card_size))
-                        break
-                    except:
-                        img_surface = None
+            path = os.path.join(ASSET_DIR, f"memory{cid}.png")
+            try:
+                img_surface = pygame.image.load(path).convert_alpha()
+                img_surface = pygame.transform.smoothscale(img_surface, (self.card_size, self.card_size))
+            except:
+                img_surface = None
             if img_surface is None:
                 img_surface = pygame.Surface((self.card_size, self.card_size))
                 img_surface.fill(colors[idx % len(colors)])

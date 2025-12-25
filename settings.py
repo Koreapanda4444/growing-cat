@@ -2,9 +2,11 @@ import pygame
 import save
 import os
 
+from config import asset_path
+
 WIDTH = 400
 HEIGHT = 600
-FONT_PATH = os.path.join("assets", "fonts", "ThinDungGeunMo.ttf")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 class SettingsScreen:
     def __init__(self, screen, restart_callback):
