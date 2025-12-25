@@ -28,17 +28,25 @@ class ShopUI:
 
         self.close_rect = pygame.Rect(360, 10, 30, 30)
 
-        self.tab_food = pygame.Rect(40, 90, 140, 32)
-        self.tab_items = pygame.Rect(220, 90, 140, 32)
+        self.tab_food = pygame.Rect(30, 90, 100, 32)
+        self.tab_toy = pygame.Rect(150, 90, 100, 32)
+        self.tab_evolution = pygame.Rect(270, 90, 100, 32)
         self.active_tab = "FOOD"
 
         self.items = {
             "FOOD": [
-                {"name": "고기", "price": 10, "id": "meat"},
-                {"name": "생선", "price": 15, "id": "fish"},
+                {"name": "밥", "price": 10, "id": "bab", "image": "assets/foods/bab.png"},
+                {"name": "생선", "price": 15, "id": "fish", "image": "assets/foods/fish.png"},
+                {"name": "츄르", "price": 12, "id": "chur", "image": "assets/foods/chur.png"},
             ],
-            "ITEM": [
-                {"name": "츄르", "price": 25, "id": "churu"},
+            "TOY": [
+                {"name": "풀밭", "price": 25, "id": "doggrass", "image": "assets/toys/doggrass.png"},
+                {"name": "낚싯대", "price": 30, "id": "fishing", "image": "assets/toys/fishing.png"},
+                {"name": "실", "price": 20, "id": "string", "image": "assets/toys/string.png"},
+            ],
+            "EVOLUTION": [
+                {"name": "고기", "price": 50, "id": "meat", "image": "assets/evolution/meat.png"},
+                {"name": "뼈", "price": 100, "id": "bone", "image": "assets/evolution/bone.png"},
             ]
         }
 
@@ -71,10 +79,14 @@ class ShopUI:
                     if self.play_click_sound:
                         self.play_click_sound()
                     self.active_tab = "FOOD"
-                elif self.tab_items.collidepoint(event.pos):
+                elif self.tab_toy.collidepoint(event.pos):
                     if self.play_click_sound:
                         self.play_click_sound()
-                    self.active_tab = "ITEM"
+                    self.active_tab = "TOY"
+                elif self.tab_evolution.collidepoint(event.pos):
+                    if self.play_click_sound:
+                        self.play_click_sound()
+                    self.active_tab = "EVOLUTION"
 
                 for rect, item in self.item_rects:
                     if rect.collidepoint(event.pos):
@@ -104,7 +116,8 @@ class ShopUI:
     def draw_tabs(self):
         for rect, label, key in [
             (self.tab_food, "음식", "FOOD"),
-            (self.tab_items, "물품", "ITEM")
+            (self.tab_toy, "장난감", "TOY"),
+            (self.tab_evolution, "진화", "EVOLUTION")
         ]:
             color = (210, 210, 210) if self.active_tab == key else (235, 235, 235)
             pygame.draw.rect(self.screen, color, rect)
@@ -119,15 +132,23 @@ class ShopUI:
         start_x = 40
         start_y = 150
         gap = 30
-        size = 120
+        size = 80
 
         for i, item in enumerate(items):
-            x = start_x + (i % 2) * (size + gap)
-            y = start_y + (i // 2) * (size + 50)
+            x = start_x + (i % 2) * (size + gap + 20)
+            y = start_y + (i // 2) * (size + 70)
 
             icon_rect = pygame.Rect(x, y, size, size)
             pygame.draw.rect(self.screen, (220, 220, 220), icon_rect)
             pygame.draw.rect(self.screen, BORDER, icon_rect, 2)
+
+            # 이미지 로드 및 표시
+            try:
+                img = pygame.image.load(item["image"]).convert_alpha()
+                img = pygame.transform.scale(img, (size - 4, size - 4))
+                self.screen.blit(img, (x + 2, y + 2))
+            except:
+                pass
 
             name = self.font.render(item["name"], True, (0, 0, 0))
             self.screen.blit(name, (x + 4, y + size + 4))

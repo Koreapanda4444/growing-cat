@@ -162,7 +162,9 @@ class Game:
         # 진화 체크 (아침에만) - 조건 충족할 때까지 반복 진화
         evolved = False
         while True:
-            can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money)
+            has_meat = self.inventory.get("고기", 0) > 0
+            has_bone = self.inventory.get("뼈", 0) > 0
+            can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone)
             if phase == state.MORNING and can_evo:
                 # 진화 비용 차감
                 cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
@@ -245,24 +247,44 @@ class Game:
 
     def use_item(self, item):
         """가방에서 아이템 사용"""
-        if item == "고기":
+        if item == "밥":
             self.cat.hunger = max(0, self.cat.hunger - 40)
         elif item == "생선":
             self.cat.hunger = max(0, self.cat.hunger - 35)
         elif item == "츄르":
             self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 30)
+        elif item == "고기":
+            self.cat.hunger = max(0, self.cat.hunger - 50)
+        elif item == "풀밭":
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 20)
+        elif item == "낚싯대":
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 25)
+        elif item == "실":
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 15)
+        elif item == "뼈":
+            self.cat.hunger = max(0, self.cat.hunger - 60)
 
     def on_buy_item(self, item):
         """상점에서 아이템 구매 시 호출되는 콜백"""
         item_id = item["id"]
         item_name = item["name"]
         
-        if item_id == "meat":
-            self.inventory["고기"] = self.inventory.get("고기", 0) + 1
+        if item_id == "bab":
+            self.inventory["밥"] = self.inventory.get("밥", 0) + 1
         elif item_id == "fish":
             self.inventory["생선"] = self.inventory.get("생선", 0) + 1
-        elif item_id == "churu":
+        elif item_id == "chur":
             self.inventory["츄르"] = self.inventory.get("츄르", 0) + 1
+        elif item_id == "meat":
+            self.inventory["고기"] = self.inventory.get("고기", 0) + 1
+        elif item_id == "doggrass":
+            self.inventory["풀밭"] = self.inventory.get("풀밭", 0) + 1
+        elif item_id == "fishing":
+            self.inventory["낚싯대"] = self.inventory.get("낚싯대", 0) + 1
+        elif item_id == "string":
+            self.inventory["실"] = self.inventory.get("실", 0) + 1
+        elif item_id == "bone":
+            self.inventory["뼈"] = self.inventory.get("뼈", 0) + 1
         
         save.save_game(self.make_save_data())
 
@@ -298,11 +320,11 @@ class Game:
                 self.panel_open = False
                 return
 
-            labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
-            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep, self.open_settings]
-            keys = ["feed", "play", "clean", "sleep", None]
+            labels = ["밥", "놀기", "씻기", "잠자기"]
+            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep]
+            keys = ["feed", "play", "clean", "sleep"]
 
-            for i in range(5):
+            for i in range(4):
                 r = pygame.Rect(
                     panel_x,
                     PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
@@ -310,16 +332,13 @@ class Game:
                     PANEL_BTN_H
                 )
                 if r.collidepoint(pos):
-                    if i < 4 and self.actions_used[keys[i]]:
+                    if self.actions_used[keys[i]]:
                         self.play_click_sound()
                         return
                     self.play_click_sound()
-                    if i == 4:
-                        self.open_settings()
-                    elif self.cat:
+                    if self.cat:
                         actions[i]()
-                        if i < 4:
-                            self.actions_used[keys[i]] = True
+                        self.actions_used[keys[i]] = True
                         save.save_game(self.make_save_data())
                         self.check_game_over()
                     return
@@ -337,9 +356,9 @@ class Game:
                 self.left_panel_open = False
                 return
 
-            labels = ["미니게임", "상점", "가방"]
-            actions = [lambda: MiniGameScreen(self.screen, self.state).run(), self.open_shop, self.open_bag]
-            for i in range(3):
+            labels = ["설정", "미니게임", "상점", "가방"]
+            actions = [self.open_settings, lambda: MiniGameScreen(self.screen, self.state).run(), self.open_shop, self.open_bag]
+            for i in range(4):
                 r = pygame.Rect(
                     panel_x,
                     PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
@@ -548,7 +567,7 @@ class Game:
             close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
             self.draw_button(close_rect, "▶ 닫기", self.panel_font)
 
-            labels = ["밥", "놀기", "씻기", "잠자기", "설정"]
+            labels = ["밥", "놀기", "씻기", "잠자기"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 if i == 0:
@@ -559,8 +578,6 @@ class Game:
                     self.draw_button_state(r, label, self.panel_font, not self.actions_used["clean"])
                 elif i == 3:
                     self.draw_button_state(r, label, self.panel_font, not self.actions_used["sleep"])
-                else:
-                    self.draw_button_state(r, label, self.panel_font, True)
 
         if not self.left_panel_open:
             pygame.draw.rect(self.screen, (220, 220, 220), LEFT_ARROW_RECT)
@@ -572,7 +589,7 @@ class Game:
             panel_x = 8
             left_close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
             self.draw_button(left_close_rect, "닫기 ◀", self.panel_font)
-            labels = ["미니게임", "상점", "가방"]
+            labels = ["설정", "미니게임", "상점", "가방"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 self.draw_button(r, label, self.panel_font)

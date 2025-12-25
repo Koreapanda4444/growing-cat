@@ -27,8 +27,27 @@ class BagUI:
             self.big_font = pygame.font.Font(None, 22)
 
         self.close_rect = pygame.Rect(360, 10, 30, 30)
-
         self.item_rects = []
+
+        # 아이템 정보 맵
+        self.item_info = {
+            "bab": {"name": "밥", "image": "assets/foods/bab.png"},
+            "fish": {"name": "생선", "image": "assets/foods/fish.png"},
+            "chur": {"name": "츄르", "image": "assets/foods/chur.png"},
+            "meat": {"name": "고기", "image": "assets/evolution/meat.png"},
+            "doggrass": {"name": "풀밭", "image": "assets/toys/doggrass.png"},
+            "fishing": {"name": "낚싯대", "image": "assets/toys/fishing.png"},
+            "meat": {"name": "고기", "image": "assets/evolution/meat.png"},
+            "bone": {"name": "뼈", "image": "assets/evolution/bone.png"},
+            "밥": {"name": "밥", "image": "assets/foods/bab.png"},
+            "생선": {"name": "생선", "image": "assets/foods/fish.png"},
+            "츄르": {"name": "츄르", "image": "assets/foods/chur.png"},
+            "고기": {"name": "고기", "image": "assets/evolution/meat.png"},
+            "풀밭": {"name": "풀밭", "image": "assets/toys/doggrass.png"},
+            "낚싯대": {"name": "낚싯대", "image": "assets/toys/fishing.png"},
+            "실": {"name": "실", "image": "assets/toys/string.png"},
+            "뼈": {"name": "뼈", "image": "assets/evolution/bone.png"},
+        }
 
     def run(self):
         clock = pygame.time.Clock()
@@ -76,26 +95,38 @@ class BagUI:
 
         start_x = 40
         start_y = 80
-        size = 100
+        size = 80
         gap = 30
 
         items = list(self.inventory.keys())
 
-        for i, item in enumerate(items):
-            x = start_x + (i % 2) * (size + gap)
-            y = start_y + (i // 2) * (size + 50)
+        for i, item_id in enumerate(items):
+            if self.inventory[item_id] <= 0:
+                continue
+
+            x = start_x + (i % 2) * (size + gap + 20)
+            y = start_y + (i // 2) * (size + 70)
 
             icon_rect = pygame.Rect(x, y, size, size)
             pygame.draw.rect(self.screen, (220, 220, 220), icon_rect)
             pygame.draw.rect(self.screen, BORDER, icon_rect, 2)
 
-            name = self.font.render(item, True, (0, 0, 0))
+            # 이미지 로드 및 표시
+            item_info = self.item_info.get(item_id, {})
+            try:
+                img = pygame.image.load(item_info.get("image", "")).convert_alpha()
+                img = pygame.transform.scale(img, (size - 4, size - 4))
+                self.screen.blit(img, (x + 2, y + 2))
+            except:
+                pass
+
+            name = self.font.render(item_info.get("name", item_id), True, (0, 0, 0))
             self.screen.blit(name, (x + 6, y + size + 4))
 
-            count = self.font.render(f"x {self.inventory[item]}", True, (80, 80, 80))
+            count = self.font.render(f"x {self.inventory[item_id]}", True, (80, 80, 80))
             self.screen.blit(count, (x + 6, y + size + 22))
 
-            self.item_rects.append((icon_rect, item))
+            self.item_rects.append((icon_rect, item_id))
 
     def draw(self):
         self.screen.fill(BG_COLOR)
