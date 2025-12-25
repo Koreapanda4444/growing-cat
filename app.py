@@ -121,6 +121,8 @@ class Game:
             self.state.minigame_used = {"jump": False, "memory": False}
         self.evolve_timer = 0
 
+        self.evolve_menu_timer = 0
+
         self.load_saved_game()
 
     def load_saved_game(self):
@@ -271,6 +273,86 @@ class Game:
         BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
         save.save_game(self.make_save_data())
 
+    def open_evolve_menu(self):
+        if not self.cat:
+            return
+        self.panel_open = False
+        self.left_panel_open = False
+        self.scene = "EVOLVE_MENU"
+        self.evolve_menu_timer = 0
+
+    def get_evolve_menu_info(self):
+        stage = getattr(self.cat, "stage", None)
+        next_stage = evolution.get_next_stage(stage)
+
+        has_meat = self.inventory.get("고기", 0) > 0
+        has_bone = self.inventory.get("뼈", 0) > 0
+        can_evo, status_msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone)
+
+        lines = []
+        if not next_stage:
+            lines.append("현재: 최종 단계")
+            lines.append("더 이상 진화할 수 없습니다")
+            return {
+                "next_stage": None,
+                "can_evolve": False,
+                "status": status_msg,
+                "lines": lines,
+            }
+
+        cost = evolution.EVOLUTION_COST.get(stage, 0)
+        lines.append(f"현재: {stage} → 다음: {next_stage}")
+        lines.append(f"비용: {cost} 코인")
+
+        if stage == evolution.BABY:
+            lines.append("조건: 14일 이상")
+        elif stage == evolution.ADULT:
+            lines.append("조건: 30일 이상")
+            lines.append(f"아이템: 고기 1개 (보유: {self.inventory.get('고기', 0)})")
+            lines.append("스탯: 행복 80↑, 피로 20↓, 청결 70↑, 배고픔 30↓")
+        elif stage == evolution.LION:
+            lines.append("조건: 50일 이상")
+            lines.append(f"아이템: 뼈 1개 (보유: {self.inventory.get('뼈', 0)})")
+            lines.append("스탯: 행복 90↑, 피로 10↓, 청결 80↑, 배고픔 20↓")
+        else:
+            lines.append("조건: -")
+
+        lines.append(f"상태: {'진화 가능' if can_evo else status_msg}")
+
+        return {
+            "next_stage": next_stage,
+            "can_evolve": can_evo,
+            "status": status_msg,
+            "lines": lines,
+        }
+
+    def try_evolve_now(self):
+        info = self.get_evolve_menu_info()
+        next_stage = info.get("next_stage")
+        if not next_stage or not info.get("can_evolve"):
+            return False
+
+        stage = self.cat.stage
+        cost = evolution.EVOLUTION_COST.get(stage, 0)
+        if self.state.money < cost:
+            return False
+
+        if stage == evolution.ADULT:
+            if self.inventory.get("고기", 0) <= 0:
+                return False
+            self.inventory["고기"] -= 1
+        elif stage == evolution.LION:
+            if self.inventory.get("뼈", 0) <= 0:
+                return False
+            self.inventory["뼈"] -= 1
+
+        self.state.money -= cost
+        self.cat.evolve_to(next_stage)
+        self.scene = "EVOLVE"
+        self.evolve_timer = 0
+        save.save_game(self.make_save_data())
+        return True
+
     def use_item(self, item):
         if not self.cat or item not in self.inventory or self.inventory[item] <= 0:
             return
@@ -373,11 +455,11 @@ class Game:
                 self.panel_open = False
                 return
 
-            labels = ["밥", "놀기", "씻기", "잠자기"]
-            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep]
+            labels = ["밥", "놀기", "씻기", "잠자기", "진화"]
+            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep, self.open_evolve_menu]
             keys = ["feed", "play", "clean", "sleep"]
 
-            for i in range(4):
+            for i in range(5):
                 r = pygame.Rect(
                     panel_x,
                     PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
@@ -385,15 +467,18 @@ class Game:
                     PANEL_BTN_H
                 )
                 if r.collidepoint(pos):
-                    if self.actions_used[keys[i]]:
-                        self.play_click_sound()
-                        return
                     self.play_click_sound()
-                    if self.cat:
-                        actions[i]()
-                        self.actions_used[keys[i]] = True
-                        save.save_game(self.make_save_data())
-                        self.check_game_over()
+                    if i < 4:
+                        if self.actions_used[keys[i]]:
+                            return
+                        if self.cat:
+                            actions[i]()
+                            self.actions_used[keys[i]] = True
+                            save.save_game(self.make_save_data())
+                            self.check_game_over()
+                        return
+
+                    actions[i]()
                     return
 
         if self.left_panel_open:
@@ -455,6 +540,35 @@ class Game:
 
             elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
                 self.handle_click_main(event.pos)
+
+            elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "EVOLVE_MENU":
+                self.handle_click_evolve_menu(event.pos)
+
+            elif event.type == pygame.KEYDOWN and self.scene == "EVOLVE_MENU":
+                if event.key == pygame.K_ESCAPE:
+                    self.scene = "MAIN"
+
+    def handle_click_evolve_menu(self, pos):
+        panel_w, panel_h = 340, 260
+        panel_x = WIDTH // 2 - panel_w // 2
+        panel_y = 170
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+
+        btn_w, btn_h = 130, 34
+        evolve_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 56, btn_w, btn_h)
+        close_rect = pygame.Rect(panel_x + panel_w - 30 - btn_w, panel_y + panel_h - 56, btn_w, btn_h)
+
+        if close_rect.collidepoint(pos):
+            self.play_click_sound()
+            self.scene = "MAIN"
+            return
+
+        info = self.get_evolve_menu_info()
+        if evolve_rect.collidepoint(pos):
+            self.play_click_sound()
+            if info.get("can_evolve"):
+                self.try_evolve_now()
+            return
 
     def draw_bar(self, x, y, label, value, color):
         ratio = value / state.MAX_STAT
@@ -563,6 +677,11 @@ class Game:
             pygame.display.flip()
             return
 
+        if self.scene == "EVOLVE_MENU":
+            self.draw_evolve_menu()
+            pygame.display.flip()
+            return
+
         if self.scene == "GAME_OVER":
             self.draw_game_over()
             pygame.display.flip()
@@ -612,7 +731,7 @@ class Game:
             close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
             self.draw_button(close_rect, "▶ 닫기", self.panel_font)
 
-            labels = ["밥", "놀기", "씻기", "잠자기"]
+            labels = ["밥", "놀기", "씻기", "잠자기", "진화"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 if i == 0:
@@ -623,6 +742,8 @@ class Game:
                     self.draw_button_state(r, label, self.panel_font, not self.actions_used["clean"])
                 elif i == 3:
                     self.draw_button_state(r, label, self.panel_font, not self.actions_used["sleep"])
+                else:
+                    self.draw_button(r, label, self.panel_font)
 
         if not self.left_panel_open:
             pygame.draw.rect(self.screen, (220, 220, 220), LEFT_ARROW_RECT)
@@ -657,6 +778,67 @@ class Game:
 
         if self.evolve_timer > 120:
             self.scene = "MAIN"
+
+    def draw_evolve_menu(self):
+        # 배경은 메인 화면과 동일하게 보여주고, 위에 패널만 얹습니다.
+        self.screen.blit(self.back_image, self.back_rect)
+
+        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
+        self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
+
+        money = getattr(self.state, "money", 0)
+        if self.coin_image:
+            self.screen.blit(self.coin_image, (INFO_X, INFO_Y + 22))
+            coin_text = self.coin_font.render(f"{money}", True, (0, 0, 0))
+            self.screen.blit(coin_text, (INFO_X + 42, INFO_Y + 28))
+        else:
+            coin_text = self.coin_font.render(f"🪙 {money}", True, (0, 0, 0))
+            self.screen.blit(coin_text, (INFO_X, INFO_Y + 22))
+
+        self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
+        self.draw_bar(STAT_X, STAT_Y_START + STAT_GAP, "피로", self.cat.tiredness, (100, 100, 255))
+        self.draw_bar(STAT_X, STAT_Y_START + 2 * STAT_GAP, "행복", self.cat.happiness, (100, 255, 100))
+        self.draw_bar(STAT_X, STAT_Y_START + 3 * STAT_GAP, "청결", self.cat.cleanliness, (180, 180, 180))
+
+        if self.cat and self.cat.image_path:
+            cat_img = pygame.image.load(self.cat.image_path).convert_alpha()
+            cat_rect = cat_img.get_rect(center=(WIDTH // 2, MAIN_CAT_Y))
+            self.screen.blit(cat_img, cat_rect)
+
+            name_text = self.name_font.render(f"{self.cat.name} - {self.cat.stage}", True, (0, 0, 0))
+            name_rect = name_text.get_rect(center=(WIDTH // 2, cat_rect.top - NAME_Y_OFFSET))
+            self.screen.blit(name_text, name_rect)
+
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_w, panel_h = 340, 260
+        panel_x = WIDTH // 2 - panel_w // 2
+        panel_y = 170
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+
+        panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        pygame.draw.rect(panel_surf, (245, 245, 245, 235), panel_surf.get_rect(), border_radius=12)
+        self.screen.blit(panel_surf, (panel_x, panel_y))
+        pygame.draw.rect(self.screen, (60, 60, 60), panel_rect, 2, border_radius=12)
+
+        title = self.big_font.render("진화", True, (30, 30, 30))
+        self.screen.blit(title, title.get_rect(center=(panel_rect.centerx, panel_y + 26)))
+        pygame.draw.line(self.screen, (220, 220, 220), (panel_x + 16, panel_y + 50), (panel_x + panel_w - 16, panel_y + 50), 1)
+
+        info = self.get_evolve_menu_info()
+        y = panel_y + 66
+        for line in info.get("lines", []):
+            t = self.hint_font.render(line, True, (40, 40, 40))
+            self.screen.blit(t, (panel_x + 20, y))
+            y += 22
+
+        btn_w, btn_h = 130, 34
+        evolve_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 56, btn_w, btn_h)
+        close_rect = pygame.Rect(panel_x + panel_w - 30 - btn_w, panel_y + panel_h - 56, btn_w, btn_h)
+        self.draw_button_state(evolve_rect, "진화하기", self.panel_font, bool(info.get("can_evolve")))
+        self.draw_button(close_rect, "닫기", self.panel_font)
 
 
 if __name__ == "__main__":
