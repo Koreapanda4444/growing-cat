@@ -7,7 +7,6 @@ import state
 from game import MiniGameScreen
 from shop import ShopUI
 from bag import BagUI
-from minigames.memory_game import MemoryGame
 import save
 
 
@@ -322,8 +321,8 @@ class Game:
                 self.left_panel_open = False
                 return
 
-            labels = ["상점", "미니게임", "가방"]
-            actions = [self.open_shop, lambda: MiniGameScreen(self.screen, self.state).run(), self.open_bag]
+            labels = ["미니게임", "상점", "가방"]
+            actions = [lambda: MiniGameScreen(self.screen, self.state).run(), self.open_shop, self.open_bag]
             for i in range(3):
                 r = pygame.Rect(
                     panel_x,
@@ -552,7 +551,7 @@ class Game:
             panel_x = 8
             left_close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
             self.draw_button(left_close_rect, "닫기 ◀", self.panel_font)
-            labels = ["상점", "미니게임", "가방"]
+            labels = ["미니게임", "상점", "가방"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 self.draw_button(r, label, self.panel_font)

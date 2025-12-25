@@ -2,6 +2,7 @@ import pygame
 import sys
 import os
 from minigames.memory_game import MemoryGame
+from minigames.cat_run import CatRunGame
 
 WIDTH = 400
 HEIGHT = 600
@@ -55,7 +56,12 @@ class MiniGameScreen:
             self.selected = "memory"
         elif self.btn_start.collidepoint(pos):
             if self.selected:
-                if self.selected == "memory" and self.state:
+                if self.selected == "jump" and self.state:
+                    result = CatRunGame(self.screen, self.state).run()
+                    # 코인 보상 처리
+                    if result and result.get("coins"):
+                        self.state.money += result["coins"]
+                elif self.selected == "memory" and self.state:
                     MemoryGame(self.screen, self.state).run()
                 self.running = False
 
