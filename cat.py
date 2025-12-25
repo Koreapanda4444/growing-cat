@@ -78,7 +78,7 @@ class Cat:
         if not self._can_act(): return
         self.happiness += state.rand_range(state.FREE_PLAY_HAPPINESS_INC)
         self.tiredness += state.rand_range(state.FREE_PLAY_TIREDNESS_INC)
-        self.hunger += state.rand_range(state.FREE_PLAY_HUNGER_DEC)
+        self.hunger += state.rand_range(state.FREE_PLAY_HUNGER_INC)
         self.cleanliness -= state.rand_range(state.FREE_PLAY_CLEANLINESS_DEC)
         self._clamp_all()
 
