@@ -6,6 +6,7 @@ from cat import Cat
 import state
 from game import MiniGameScreen
 from shop import ShopUI
+from bag import BagUI
 import save
 
 
@@ -106,6 +107,7 @@ class Game:
         self.panel_open = False
         self.game_over_reason = None
         self.ending_log = {}
+        self.inventory = {}
 
         self.load_saved_game()
 
@@ -123,6 +125,7 @@ class Game:
             self.cat.cleanliness = cat_data["cleanliness"]
             
             self.state.money = data.get("money", 0)
+            self.inventory = data.get("inventory", {})
             self.scene = "MAIN"
 
     def load_image(self, filename):
@@ -174,12 +177,14 @@ class Game:
         self.panel_open = False
         self.game_over_reason = None
         self.ending_log = {}
+        self.inventory = {}
 
     def make_save_data(self):
         return {
             "day": self.state.day,
             "time_phase": self.state.time_phase,
             "money": self.state.money,
+            "inventory": self.inventory,
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
@@ -210,15 +215,30 @@ class Game:
         self.state.money = self.state.money
         save.save_game(self.make_save_data())
 
+    def open_bag(self):
+        BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
+        save.save_game(self.make_save_data())
+
+    def use_item(self, item):
+        """가방에서 아이템 사용"""
+        if item == "고기":
+            self.cat.hunger = max(0, self.cat.hunger - 40)
+        elif item == "생선":
+            self.cat.hunger = max(0, self.cat.hunger - 35)
+        elif item == "츄르":
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 30)
+
     def on_buy_item(self, item):
         """상점에서 아이템 구매 시 호출되는 콜백"""
         item_id = item["id"]
-        if item_id == "food":
-            self.cat.hunger = max(0, self.cat.hunger - 30)
-        elif item_id == "toy":
-            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 25)
-        elif item_id == "clean":
-            self.cat.cleanliness = min(state.MAX_STAT, self.cat.cleanliness + 30)
+        item_name = item["name"]
+        
+        if item_id == "meat":
+            self.inventory["고기"] = self.inventory.get("고기", 0) + 1
+        elif item_id == "fish":
+            self.inventory["생선"] = self.inventory.get("생선", 0) + 1
+        elif item_id == "churu":
+            self.inventory["츄르"] = self.inventory.get("츄르", 0) + 1
         
         save.save_game(self.make_save_data())
 
@@ -244,6 +264,18 @@ class Game:
         )
         if minigame_rect.collidepoint(pos):
             MiniGameScreen(self.screen).run()
+            return
+
+        # 가방 버튼
+        bag_rect = pygame.Rect(
+            start_x + 2 * (BOTTOM_BTN_W + BOTTOM_GAP),
+            BOTTOM_BTN_Y,
+            BOTTOM_BTN_W,
+            BOTTOM_BTN_H
+        )
+        if bag_rect.collidepoint(pos):
+            self.play_click_sound()
+            self.open_bag()
             return
 
         if ARROW_RECT.collidepoint(pos):
