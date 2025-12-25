@@ -120,18 +120,19 @@ class Game:
     def load_saved_game(self):
         data = save.load_game()
         if data and "cat" in data:
-            self.state.day = data["day"]
-            self.state.time_phase = data["time_phase"]
+            self.state.day = max(1, int(data.get("day", 1)))
+            self.state.time_phase = data.get("time_phase", state.MORNING)
             
             cat_data = data["cat"]
             self.cat = Cat(cat_data["name"], cat_data["stage"])
-            self.cat.hunger = cat_data["hunger"]
-            self.cat.tiredness = cat_data["tiredness"]
-            self.cat.happiness = cat_data["happiness"]
-            self.cat.cleanliness = cat_data["cleanliness"]
-            
-            self.state.money = data.get("money", 0)
-            self.inventory = data.get("inventory", {})
+            self.cat.hunger = state.clamp(float(cat_data.get("hunger", 50)))
+            self.cat.tiredness = state.clamp(float(cat_data.get("tiredness", 20)))
+            self.cat.happiness = state.clamp(float(cat_data.get("happiness", 70)))
+            self.cat.cleanliness = state.clamp(float(cat_data.get("cleanliness", 60)))
+
+            self.state.money = max(0, int(data.get("money", 0)))
+            raw_inv = data.get("inventory", {})
+            self.inventory = {k: max(0, int(v)) for k, v in raw_inv.items() if isinstance(k, str)}
             self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False})
             self.scene = "MAIN"
 
@@ -158,7 +159,7 @@ class Game:
             self.cat.on_night()
         else:
             self.cat.on_morning()
-            self.state.money += 5
+            self.state.money = max(0, int(self.state.money + 5))
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.state.minigame_used = {"jump": False, "memory": False}
@@ -170,9 +171,12 @@ class Game:
             can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone)
             if phase == state.MORNING and can_evo:
                 cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
-                self.state.money -= cost
-                evolution.evolve(self.cat)
-                evolved = True
+                if self.state.money >= cost:
+                    self.state.money -= cost
+                    evolution.evolve(self.cat)
+                    evolved = True
+                else:
+                    break
             else:
                 break
 
@@ -209,19 +213,29 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
 
     def make_save_data(self):
+        try:
+            clean_inventory = {k: max(0, int(v)) for k, v in self.inventory.items() if isinstance(k, str) and isinstance(v, (int, float))}
+        except (TypeError, ValueError):
+            clean_inventory = {}
+        
+        try:
+            clean_money = max(0, int(self.state.money))
+        except (TypeError, ValueError):
+            clean_money = 0
+        
         return {
-            "day": self.state.day,
+            "day": max(1, int(self.state.day)),
             "time_phase": self.state.time_phase,
-            "money": self.state.money,
-            "inventory": self.inventory,
+            "money": clean_money,
+            "inventory": clean_inventory,
             "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False}),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
-                "hunger": self.cat.hunger,
-                "tiredness": self.cat.tiredness,
-                "happiness": self.cat.happiness,
-                "cleanliness": self.cat.cleanliness
+                "hunger": state.clamp(float(self.cat.hunger)),
+                "tiredness": state.clamp(float(self.cat.tiredness)),
+                "happiness": state.clamp(float(self.cat.happiness)),
+                "cleanliness": state.clamp(float(self.cat.cleanliness))
             }
         }
 
@@ -240,8 +254,8 @@ class Game:
         SettingsScreen(self.screen, self.restart_game).run()
 
     def open_shop(self):
-        ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound).run()
-        self.state.money = self.state.money
+        shop = ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound)
+        shop.run()
         save.save_game(self.make_save_data())
 
     def open_bag(self):
@@ -249,22 +263,37 @@ class Game:
         save.save_game(self.make_save_data())
 
     def use_item(self, item):
+        if not self.cat or item not in self.inventory or self.inventory[item] <= 0:
+            return
+        
         if item == "사료":
             self.cat.hunger = max(0, self.cat.hunger - 30)
+            self.inventory["사료"] -= 1
         elif item == "생선":
             self.cat.hunger = max(0, self.cat.hunger - 50)
+            self.inventory["생선"] -= 1
         elif item == "츄르":
-            self.cat.hunger = max(0, self.cat.hunger - 30)
+            self.cat.hunger = max(0, self.cat.hunger - 70)
+            self.inventory["츄르"] -= 1
         elif item == "강아지풀":
             self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 20)
-        elif item == "낚싯대":
-            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 35)
+            self.inventory["강아지풀"] -= 1
         elif item == "실":
-            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 25)
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 30)
+            self.inventory["실"] -= 1
+        elif item == "낚싯대":
+            self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 50)
+            self.inventory["낚싯대"] -= 1
+        
+        self.cat._clamp_all()
+        save.save_game(self.make_save_data())
 
     def on_buy_item(self, item):
         item_id = item["id"]
-        item_name = item["name"]
+        price = item.get("price", 0)
+        if self.state.money < price:
+            return
+        self.state.money -= price
         
         if item_id == "bab":
             self.inventory["사료"] = self.inventory.get("사료", 0) + 1
@@ -491,14 +520,6 @@ class Game:
         pygame.draw.rect(self.screen, (220, 220, 220), rect)
         pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
         txt = font.render(text, True, (0, 0, 0))
-        self.screen.blit(txt, txt.get_rect(center=rect.center))
-
-    def draw_button_state(self, rect, text, font, enabled=True):
-        fill = (220, 220, 220) if enabled else (180, 180, 180)
-        text_color = (0, 0, 0) if enabled else (120, 120, 120)
-        pygame.draw.rect(self.screen, fill, rect)
-        pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
-        txt = font.render(text, True, text_color)
         self.screen.blit(txt, txt.get_rect(center=rect.center))
 
     def draw_button_state(self, rect, text, font, enabled=True):

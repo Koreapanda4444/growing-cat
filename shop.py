@@ -35,18 +35,18 @@ class ShopUI:
 
         self.items = {
             "FOOD": [
-                {"name": "밥", "price": 10, "id": "bab", "image": "assets/foods/bab.png"},
-                {"name": "생선", "price": 15, "id": "fish", "image": "assets/foods/fish.png"},
-                {"name": "츄르", "price": 12, "id": "chur", "image": "assets/foods/chur.png"},
+                {"name": "밥", "price": 30, "id": "bab", "image": "assets/foods/bab.png"},
+                {"name": "생선", "price": 50, "id": "fish", "image": "assets/foods/fish.png"},
+                {"name": "츄르", "price": 80, "id": "chur", "image": "assets/foods/chur.png"},
             ],
             "TOY": [
-                {"name": "풀밭", "price": 25, "id": "doggrass", "image": "assets/toys/doggrass.png"},
-                {"name": "낚싯대", "price": 30, "id": "fishing", "image": "assets/toys/fishing.png"},
-                {"name": "실", "price": 20, "id": "string", "image": "assets/toys/string.png"},
+                {"name": "풀밭", "price": 30, "id": "doggrass", "image": "assets/toys/doggrass.png"},
+                {"name": "낚싯대", "price": 50, "id": "fishing", "image": "assets/toys/fishing.png"},
+                {"name": "실", "price": 40, "id": "string", "image": "assets/toys/string.png"},
             ],
             "EVOLUTION": [
-                {"name": "고기", "price": 50, "id": "meat", "image": "assets/evolution/meat.png"},
-                {"name": "뼈", "price": 100, "id": "bone", "image": "assets/evolution/bone.png"},
+                {"name": "고기", "price": 100, "id": "meat", "image": "assets/evolution/meat.png"},
+                {"name": "뼈", "price": 300, "id": "bone", "image": "assets/evolution/bone.png"},
             ]
         }
 

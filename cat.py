@@ -90,8 +90,8 @@ class Cat:
 
     def sleep(self):
         if not self._can_act(): return
-        self.tiredness -= state.rand_range(state.FREE_SLEEP_TIREDNESS_DEC)
-        self.happiness += state.rand_range(state.FREE_SLEEP_HAPPINESS_INC)
+        self.tiredness -= state.rand_range(state.SLEEP_TIREDNESS_DEC)
+        self.happiness += state.rand_range(state.SLEEP_HAPPINESS_INC)
         self._clamp_all()
 
     def _can_act(self):
