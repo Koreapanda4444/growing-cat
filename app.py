@@ -81,6 +81,7 @@ class Game:
         self.cat = None
         self.panel_open = False
         self.game_over_reason = None
+        self.ending_log = {}
 
     def load_image(self, filename):
         path = os.path.join(ASSETS_DIR, filename)
@@ -112,7 +113,23 @@ class Game:
         result = self.cat.check_game_over()
         if result:
             self.game_over_reason = result
+            self.ending_log = {
+                "day": self.state.day,
+                "hunger": int(self.cat.hunger),
+                "tiredness": int(self.cat.tiredness),
+                "happiness": int(self.cat.happiness),
+                "cleanliness": int(self.cat.cleanliness),
+            }
             self.scene = "GAME_OVER"
+
+    def restart_game(self):
+        self.state = state.GameState()
+        self.cat = None
+        self.input_name = ""
+        self.scene = "NAMING"
+        self.panel_open = False
+        self.game_over_reason = None
+        self.ending_log = {}
 
     def handle_click_main(self, pos):
         start_x = (WIDTH - (BOTTOM_BTN_W * 3 + BOTTOM_GAP * 2)) // 2
@@ -172,6 +189,8 @@ class Game:
                 if self.scene == "GAME_OVER":
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
+                    elif event.key == pygame.K_r:
+                        self.restart_game()
 
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
@@ -226,20 +245,59 @@ class Game:
         self.screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, box_rect.y + 52))
 
     def draw_game_over(self):
-        self.screen.fill((30, 30, 30))
+        # 배경 + 반투명 오버레이
+        self.screen.blit(self.back_image, self.back_rect)
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        self.screen.blit(overlay, (0, 0))
 
-        if self.game_over_reason == "DEAD":
-            msg = "고양이가 죽었습니다…"
-        else:
-            msg = "고양이가 가출했습니다…"
+        # 중앙 라운드 패널
+        panel_w, panel_h = 320, 260
+        panel_x = WIDTH // 2 - panel_w // 2
+        panel_y = 180
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
 
+        panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        pygame.draw.rect(panel_surf, (245, 245, 245, 230), panel_surf.get_rect(), border_radius=12)
+        self.screen.blit(panel_surf, (panel_x, panel_y))
+        pygame.draw.rect(self.screen, (255, 80, 80), panel_rect, 2, border_radius=12)
+
+        # 타이틀(드랍 섀도)
         title = self.big_font.render("GAME OVER", True, (255, 80, 80))
-        text = self.font.render(msg, True, (220, 220, 220))
-        hint = self.font.render("ESC 키를 눌러 종료", True, (180, 180, 180))
+        shadow = self.big_font.render("GAME OVER", True, (30, 30, 30))
+        title_cx = panel_rect.centerx
+        title_y = panel_y + 18
+        self.screen.blit(shadow, shadow.get_rect(center=(title_cx + 1, title_y + 1)))
+        self.screen.blit(title, title.get_rect(center=(title_cx, title_y)))
 
-        self.screen.blit(title, title.get_rect(center=(WIDTH//2, 230)))
-        self.screen.blit(text, text.get_rect(center=(WIDTH//2, 280)))
-        self.screen.blit(hint, hint.get_rect(center=(WIDTH//2, 330)))
+        # 메시지
+        msg = "고양이가 죽었습니다…" if self.game_over_reason == "DEAD" else "고양이가 가출했습니다…"
+        text = self.font.render(msg, True, (60, 60, 60))
+        self.screen.blit(text, text.get_rect(center=(panel_rect.centerx, title_y + 40)))
+
+        # 힌트 두 줄
+        hint1 = self.font.render("ESC 키를 눌러 종료", True, (100, 100, 100))
+        hint2 = self.font.render("R 키를 눌러 재시작", True, (100, 100, 100))
+        self.screen.blit(hint1, hint1.get_rect(center=(panel_rect.centerx, title_y + 72)))
+        self.screen.blit(hint2, hint2.get_rect(center=(panel_rect.centerx, title_y + 94)))
+
+        # 구분선
+        sep_y = title_y + 108
+        pygame.draw.line(self.screen, (220, 220, 220), (panel_x + 16, sep_y), (panel_x + panel_w - 16, sep_y), 1)
+
+        # 엔딩 로그
+        log = self.ending_log
+        y = sep_y + 14
+        for line in [
+            f"생존 일수 : {log.get('day', 0)}일",
+            f"배고픔 : {log.get('hunger', 0)}",
+            f"피로 : {log.get('tiredness', 0)}",
+            f"행복 : {log.get('happiness', 0)}",
+            f"청결 : {log.get('cleanliness', 0)}",
+        ]:
+            t = self.font.render(line, True, (50, 50, 50))
+            self.screen.blit(t, (panel_x + 24, y))
+            y += 22
 
     def draw_button(self, rect, text, font):
         pygame.draw.rect(self.screen, (220, 220, 220), rect)

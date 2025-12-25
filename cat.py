@@ -106,12 +106,12 @@ class Cat:
             self.runaway = True
 
     def check_game_over(self):
-        if self.hunger <= 0:
+        if self.hunger >= state.DEATH_HUNGER_THRESHOLD:
             return "DEAD"
-        if self.tiredness >= 100:
+        if self.tiredness >= state.DEATH_TIREDNESS_THRESHOLD:
             return "DEAD"
-        if self.happiness <= 10:
+        if self.happiness <= state.RUNAWAY_HAPPINESS_THRESHOLD:
             return "RUNAWAY"
-        if self.cleanliness <= 10:
+        if self.cleanliness <= state.RUNAWAY_CLEANLINESS_THRESHOLD:
             return "RUNAWAY"
         return None
