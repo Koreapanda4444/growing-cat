@@ -127,22 +127,38 @@ class Game:
 
     def load_saved_game(self):
         data = save.load_game()
-        if data and "cat" in data:
-            self.state.day = max(1, int(data.get("day", 1)))
-            self.state.time_phase = data.get("time_phase", state.MORNING)
-            
-            cat_data = data["cat"]
-            self.cat = Cat(cat_data["name"], cat_data["stage"])
+        if not isinstance(data, dict) or "cat" not in data:
+            return
+
+        self.state.day = max(1, int(data.get("day", 1)))
+        self.state.time_phase = data.get("time_phase", state.MORNING)
+
+        cat_data = data.get("cat")
+        if not isinstance(cat_data, dict):
+            return
+
+        name = cat_data.get("name")
+        stage = cat_data.get("stage")
+        if not isinstance(name, str) or not isinstance(stage, str):
+            return
+
+        self.cat = Cat(name, stage)
+        try:
             self.cat.hunger = state.clamp(float(cat_data.get("hunger", 50)))
             self.cat.tiredness = state.clamp(float(cat_data.get("tiredness", 20)))
             self.cat.happiness = state.clamp(float(cat_data.get("happiness", 70)))
             self.cat.cleanliness = state.clamp(float(cat_data.get("cleanliness", 60)))
+        except (TypeError, ValueError):
+            pass
 
-            self.state.money = max(0, int(data.get("money", 0)))
-            raw_inv = data.get("inventory", {})
+        self.state.money = max(0, int(data.get("money", 0)))
+        raw_inv = data.get("inventory", {})
+        if isinstance(raw_inv, dict):
             self.inventory = {k: max(0, int(v)) for k, v in raw_inv.items() if isinstance(k, str)}
-            self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False})
-            self.scene = "MAIN"
+        else:
+            self.inventory = {}
+        self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False})
+        self.scene = "MAIN"
 
     def load_image(self, filename):
         try:
@@ -789,7 +805,6 @@ class Game:
             self.scene = "MAIN"
 
     def draw_evolve_menu(self):
-        # 배경은 메인 화면과 동일하게 보여주고, 위에 패널만 얹습니다.
         self.screen.blit(self.back_image, self.back_rect)
 
         info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"

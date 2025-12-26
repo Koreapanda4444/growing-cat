@@ -1,6 +1,4 @@
 import base64
-import ctypes
-import ctypes.wintypes
 import os
 from pathlib import Path
 from typing import Optional
@@ -10,28 +8,11 @@ _APP_DIR = Path(os.getenv("APPDATA") or str(Path.home())) / "growing-cat"
 _KEY_FILE = _APP_DIR / "save_hmac_key.bin"
 
 
-class _DATA_BLOB(ctypes.Structure):
-    _fields_ = [
-        ("cbData", ctypes.wintypes.DWORD),
-        ("pbData", ctypes.POINTER(ctypes.c_byte)),
-    ]
+def _is_windows() -> bool:
+    return os.name == "nt"
 
 
 _CRYPTPROTECT_UI_FORBIDDEN = 0x1
-
-
-def _bytes_to_blob(data: bytes) -> _DATA_BLOB:
-    buf = ctypes.create_string_buffer(data)
-    return _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
-
-
-def _blob_to_bytes(blob: _DATA_BLOB) -> bytes:
-    if not blob.pbData:
-        return b""
-    try:
-        return ctypes.string_at(blob.pbData, blob.cbData)
-    finally:
-        ctypes.windll.kernel32.LocalFree(blob.pbData)
 
 
 def _entropy() -> bytes:
@@ -39,6 +20,30 @@ def _entropy() -> bytes:
 
 
 def _dpapi_protect(data: bytes) -> bytes:
+    if not _is_windows():
+        raise OSError("DPAPI is only available on Windows")
+
+    import ctypes
+    import ctypes.wintypes
+
+    class _DATA_BLOB(ctypes.Structure):
+        _fields_ = [
+            ("cbData", ctypes.wintypes.DWORD),
+            ("pbData", ctypes.POINTER(ctypes.c_byte)),
+        ]
+
+    def _bytes_to_blob(buf_bytes: bytes) -> _DATA_BLOB:
+        buf = ctypes.create_string_buffer(buf_bytes)
+        return _DATA_BLOB(len(buf_bytes), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
+
+    def _blob_to_bytes(blob: _DATA_BLOB) -> bytes:
+        if not blob.pbData:
+            return b""
+        try:
+            return ctypes.string_at(blob.pbData, blob.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(blob.pbData)
+
     in_blob = _bytes_to_blob(data)
     out_blob = _DATA_BLOB()
     entropy_blob = _bytes_to_blob(_entropy())
@@ -59,11 +64,35 @@ def _dpapi_protect(data: bytes) -> bytes:
 
 
 def _dpapi_unprotect(data: bytes) -> bytes:
+    if not _is_windows():
+        raise OSError("DPAPI is only available on Windows")
+
+    import ctypes
+    import ctypes.wintypes
+
+    class _DATA_BLOB(ctypes.Structure):
+        _fields_ = [
+            ("cbData", ctypes.wintypes.DWORD),
+            ("pbData", ctypes.POINTER(ctypes.c_byte)),
+        ]
+
+    def _bytes_to_blob(buf_bytes: bytes) -> _DATA_BLOB:
+        buf = ctypes.create_string_buffer(buf_bytes)
+        return _DATA_BLOB(len(buf_bytes), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
+
+    def _blob_to_bytes(blob: _DATA_BLOB) -> bytes:
+        if not blob.pbData:
+            return b""
+        try:
+            return ctypes.string_at(blob.pbData, blob.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(blob.pbData)
+
     in_blob = _bytes_to_blob(data)
     out_blob = _DATA_BLOB()
     entropy_blob = _bytes_to_blob(_entropy())
 
-    ok = ctypes.windll.crypt32.CryptUnprotectData(
+    ok = ctypes.windll.crypt32.CryptUnprotectData(  # type: ignore[attr-defined]
         ctypes.byref(in_blob),
         None,
         ctypes.byref(entropy_blob),
@@ -97,8 +126,9 @@ def load_hmac_key() -> Optional[bytes]:
         return None
 
     blob = _KEY_FILE.read_bytes()
-    raw = _dpapi_unprotect(blob)
-    return raw
+    if _is_windows():
+        return _dpapi_unprotect(blob)
+    return blob
 
 
 def get_or_create_hmac_key(*, num_bytes: int = 32) -> bytes:
@@ -108,7 +138,15 @@ def get_or_create_hmac_key(*, num_bytes: int = 32) -> bytes:
 
     key = os.urandom(num_bytes)
     _APP_DIR.mkdir(parents=True, exist_ok=True)
-    blob = _dpapi_protect(key)
+    if _is_windows():
+        blob = _dpapi_protect(key)
+    else:
+        blob = key
+        try:
+            os.chmod(_KEY_FILE, 0o600)
+        except Exception:
+            pass
+
     _KEY_FILE.write_bytes(blob)
     return key
 
