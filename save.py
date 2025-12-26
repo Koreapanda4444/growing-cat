@@ -3,7 +3,9 @@ import os
 import hmac
 import hashlib
 
-_SAVE_HMAC_KEY = b"growing-cat-save-file"
+from save_key_store import get_or_create_hmac_key
+
+_LEGACY_SAVE_HMAC_KEY = b"growing-cat-save-file"
 _SIG_FIELD = "_sig"
 
 
@@ -18,7 +20,13 @@ def _canonical_dumps(data):
 
 def _compute_sig(payload):
     msg = _canonical_dumps(payload).encode("utf-8")
-    return hmac.new(_SAVE_HMAC_KEY, msg, hashlib.sha256).hexdigest()
+    key = get_or_create_hmac_key()
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+
+def _compute_sig_with_key(payload, key: bytes):
+    msg = _canonical_dumps(payload).encode("utf-8")
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()
 
 
 def _strip_sig(data):
@@ -65,11 +73,19 @@ def load_game():
 
         payload = _strip_sig(data)
         expected = _compute_sig(payload)
-        if not hmac.compare_digest(sig, expected):
-            print("무결성 오류: save.json이 수정되었거나 손상되었습니다.")
-            return None
+        if hmac.compare_digest(sig, expected):
+            return payload
 
-        return payload
+        legacy_expected = _compute_sig_with_key(payload, _LEGACY_SAVE_HMAC_KEY)
+        if hmac.compare_digest(sig, legacy_expected):
+            try:
+                save_game(payload)
+            except Exception:
+                pass
+            return payload
+
+        print("무결성 오류: save.json이 수정되었거나 손상되었습니다.")
+        return None
     except (OSError, IOError, json.JSONDecodeError) as e:
         print(f"로드 실패: {e}")
         return None
