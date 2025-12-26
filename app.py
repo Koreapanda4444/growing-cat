@@ -179,6 +179,15 @@ class Game:
             if phase == state.MORNING and can_evo:
                 cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
                 if self.state.money >= cost:
+                    if self.cat.stage == evolution.ADULT:
+                        if self.inventory.get("고기", 0) <= 0:
+                            break
+                        self.inventory["고기"] -= 1
+                    elif self.cat.stage == evolution.LION:
+                        if self.inventory.get("뼈", 0) <= 0:
+                            break
+                        self.inventory["뼈"] -= 1
+
                     self.state.money -= cost
                     evolution.evolve(self.cat)
                     evolved = True

@@ -48,3 +48,16 @@ def can_evolve(cat, day, coin, has_meat=False, has_bone=False):
         return True, "진화 가능"
 
     return False, "불가"
+
+
+def evolve(cat):
+    next_stage = get_next_stage(getattr(cat, "stage", None))
+    if not next_stage:
+        return False
+
+    if hasattr(cat, "evolve_to") and callable(getattr(cat, "evolve_to")):
+        cat.evolve_to(next_stage)
+    else:
+        cat.stage = next_stage
+
+    return True
