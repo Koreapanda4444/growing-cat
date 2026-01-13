@@ -29,21 +29,21 @@ def can_evolve(cat, day, coin, has_meat=False, has_bone=False):
         return False, f"코인 {cost} 필요"
 
     if cat.stage == BABY:
-        if day < 14:
-            return False, "14일 필요"
+        if day < 7:
+            return False, "7일 필요"
         return True, "진화 가능"
 
     if cat.stage == ADULT:
-        if day < 30 or not has_meat:
-            return False, "30일 + 고기 필요"
-        if cat.happiness < 80 or cat.tiredness > 20 or cat.cleanliness < 70 or cat.hunger > 30:
+        if day < 21 or not has_meat:
+            return False, "21일 + 고기 필요"
+        if cat.happiness < 75 or cat.tiredness > 25 or cat.cleanliness < 75 or cat.hunger > 25:
             return False, "스탯 부족"
         return True, "진화 가능"
 
     if cat.stage == LION:
-        if day < 50 or not has_bone:
-            return False, "50일 + 뼈 필요"
-        if cat.happiness < 90 or cat.tiredness > 10 or cat.cleanliness < 80 or cat.hunger > 20:
+        if day < 35 or not has_bone:
+            return False, "35일 + 뼈 필요"
+        if cat.happiness < 80 or cat.tiredness > 15 or cat.cleanliness < 80 or cat.hunger > 15:
             return False, "스탯 부족"
         return True, "진화 가능"
 
