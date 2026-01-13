@@ -15,9 +15,10 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:
-    def __init__(self, screen, state=None):
+    def __init__(self, screen, state=None, ach=None):
         self.screen = screen
         self.state = state
+        self.ach = ach
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -57,6 +58,8 @@ class MiniGameScreen:
                 if self.selected == "jump" and self.state:
                     if getattr(self.state, "minigame_used", {}).get("jump"):
                         return
+                    if self.ach:
+                        self.ach.on_event("minigame_played")
                     result = CatRunGame(self.screen, self.state).run()
                     if result and self.state:
                         try:
@@ -68,11 +71,37 @@ class MiniGameScreen:
                             self.state.money = max(0, int(self.state.money) + coins)
                         except (TypeError, ValueError):
                             self.state.money = coins
+
+                        if self.ach and coins > 0:
+                            self.ach.on_event("coins_earned", amount=coins)
+
+                        if self.ach and coins > 0:
+                            self.ach.on_event("minigame_won")
                     self.state.minigame_used["jump"] = True
                 elif self.selected == "memory" and self.state:
                     if getattr(self.state, "minigame_used", {}).get("memory"):
                         return
-                    MemoryGame(self.screen, self.state).run()
+                    if self.ach:
+                        self.ach.on_event("minigame_played")
+
+                    result = MemoryGame(self.screen, self.state).run()
+                    if isinstance(result, dict):
+                        try:
+                            coins = int(result.get("coins", 0))
+                        except (TypeError, ValueError):
+                            coins = 0
+                        coins = max(0, coins)
+                        if coins:
+                            try:
+                                self.state.money = max(0, int(self.state.money) + coins)
+                            except (TypeError, ValueError):
+                                self.state.money = coins
+                            if self.ach:
+                                self.ach.on_event("coins_earned", amount=coins)
+
+                        if self.ach and bool(result.get("won")):
+                            self.ach.on_event("minigame_won")
+
                     self.state.minigame_used["memory"] = True
                 self.running = False
 

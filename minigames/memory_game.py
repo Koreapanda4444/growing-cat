@@ -53,6 +53,9 @@ class MemoryGame:
         self.limit_start_ms = None
         self.time_limit_ms = 30000
 
+        self.won = False
+        self.reward_coins = 0
+
         self.back_image = None
         back_path = os.path.join(ASSET_DIR, "memoryback.png")
         try:
@@ -148,12 +151,12 @@ class MemoryGame:
             self.limit_start_ms = now
 
         if all(c["matched"] for c in self.cards):
-            reward = max(10, 100 - 10 * self.fail_count)
-            if self.state is not None:
-                try:
-                    self.state.money = max(0, int(self.state.money) + int(reward))
-                except (TypeError, ValueError):
-                    self.state.money = max(0, int(reward))
+            reward = max(10, 80 - 10 * self.fail_count)
+            self.won = True
+            try:
+                self.reward_coins = max(0, int(reward))
+            except (TypeError, ValueError):
+                self.reward_coins = 0
             self.running = False
             return
 
@@ -207,3 +210,5 @@ class MemoryGame:
 
             self.update()
             self.draw()
+
+        return {"won": bool(self.won), "coins": int(self.reward_coins)}

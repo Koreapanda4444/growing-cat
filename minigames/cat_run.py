@@ -164,7 +164,7 @@ class CatRunGame:
 
     def get_reward(self):
         distance_int = int(self.distance)
-        coin_reward = (distance_int // 100) * 20
+        coin_reward = (distance_int // 100) * 10
         return {"distance": distance_int, "coins": coin_reward}
 
     def _compute_next_spawn_frames(self):

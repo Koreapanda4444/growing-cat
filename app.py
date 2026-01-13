@@ -10,6 +10,8 @@ import save
 import evolution
 from config import asset_path
 from pg_utils import load_font, load_image, load_sound, play_music
+from achievements import AchievementsManager, draw_toasts, draw_achievements_panel
+from pathlib import Path
 
 
 WIDTH = 400
@@ -86,6 +88,16 @@ class Game:
         self.coin_font = load_font(FONT_PATH, 20)
 
         self.state = state.GameState()
+
+        try:
+            base = Path(os.getenv("APPDATA") or str(Path.home())) / "growing-cat"
+            base.mkdir(parents=True, exist_ok=True)
+            self.ach = AchievementsManager(str(base / "achievements_save.json"))
+        except Exception:
+            self.ach = AchievementsManager()
+        self.show_achievements = False
+        self.ach_scroll = 0
+
         self.cat = None
         self.panel_open = False
         self.left_panel_open = False
@@ -160,6 +172,20 @@ class Game:
             self.cat.on_morning()
             self.state.money = max(0, int(self.state.money + 5))
 
+            if self.ach:
+                self.ach.on_event("day_end")
+                self.ach.on_event("coins_earned", amount=5)
+                try:
+                    stats = {
+                        "happiness": int(self.cat.happiness),
+                        "cleanliness": int(self.cat.cleanliness),
+                        "hunger": int(self.cat.hunger),
+                        "fatigue": int(self.cat.tiredness),
+                    }
+                    self.ach.check_stats_on_day_end(stats)
+                except Exception:
+                    pass
+
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.state.minigame_used = {"jump": False, "memory": False}
 
@@ -183,6 +209,14 @@ class Game:
                     self.state.money -= cost
                     evolution.evolve(self.cat)
                     evolved = True
+
+                    if self.ach:
+                        stage_map = {
+                            evolution.ADULT: "adult",
+                            evolution.LION: "lion",
+                            evolution.DINO: "dino",
+                        }
+                        self.ach.on_event("evolved", stage=stage_map.get(self.cat.stage, ""))
                 else:
                     break
             else:
@@ -267,7 +301,7 @@ class Game:
         save.save_game(self.make_save_data())
 
     def open_minigame(self):
-        MiniGameScreen(self.screen, self.state).run()
+        MiniGameScreen(self.screen, self.state, self.ach).run()
         save.save_game(self.make_save_data())
 
     def open_bag(self):
@@ -349,6 +383,15 @@ class Game:
 
         self.state.money -= cost
         self.cat.evolve_to(next_stage)
+
+        if self.ach:
+            stage_map = {
+                evolution.ADULT: "adult",
+                evolution.LION: "lion",
+                evolution.DINO: "dino",
+            }
+            self.ach.on_event("evolved", stage=stage_map.get(self.cat.stage, ""))
+
         self.scene = "EVOLVE"
         self.evolve_timer = 0
         save.save_game(self.make_save_data())
@@ -403,6 +446,9 @@ class Game:
         if self.state.money < price:
             return False
         self.state.money -= price
+
+        if self.ach:
+            self.ach.on_event("item_bought")
         
         if item_id == "bab":
             self.inventory["사료"] = self.inventory.get("사료", 0) + 1
@@ -522,6 +568,23 @@ class Game:
                         self.input_name += ch
 
             elif event.type == pygame.KEYDOWN:
+                # 업적 패널 토글/조작 (MAIN에서만)
+                if self.scene == "MAIN":
+                    if event.key == pygame.K_a:
+                        self.show_achievements = not self.show_achievements
+                        return
+
+                    if self.show_achievements:
+                        if event.key == pygame.K_ESCAPE:
+                            self.show_achievements = False
+                            return
+                        if event.key == pygame.K_UP:
+                            self.ach_scroll = max(0, int(self.ach_scroll) - 40)
+                            return
+                        if event.key == pygame.K_DOWN:
+                            self.ach_scroll = int(self.ach_scroll) + 40
+                            return
+
                 if self.scene == "GAME_OVER":
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
@@ -540,7 +603,8 @@ class Game:
                         self.scene = "MAIN"
 
             elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
-                self.handle_click_main(event.pos)
+                if not self.show_achievements:
+                    self.handle_click_main(event.pos)
 
             elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "EVOLVE_MENU":
                 self.handle_click_evolve_menu(event.pos)
@@ -675,21 +739,29 @@ class Game:
     def draw(self):
         if self.scene == "EVOLVE":
             self.draw_evolve()
+            if self.ach:
+                draw_toasts(self.screen, self.font, self.ach)
             pygame.display.flip()
             return
 
         if self.scene == "EVOLVE_MENU":
             self.draw_evolve_menu()
+            if self.ach:
+                draw_toasts(self.screen, self.font, self.ach)
             pygame.display.flip()
             return
 
         if self.scene == "GAME_OVER":
             self.draw_game_over()
+            if self.ach:
+                draw_toasts(self.screen, self.font, self.ach)
             pygame.display.flip()
             return
 
         if self.scene == "NAMING":
             self.draw_naming()
+            if self.ach:
+                draw_toasts(self.screen, self.font, self.ach)
             pygame.display.flip()
             return
 
@@ -764,6 +836,11 @@ class Game:
         center_x = (WIDTH - BOTTOM_BTN_W) // 2
         advance_rect = pygame.Rect(center_x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
         self.draw_button(advance_rect, "다음 시간", self.tab_font)
+
+        if self.ach:
+            draw_toasts(self.screen, self.font, self.ach)
+            if self.show_achievements:
+                draw_achievements_panel(self.screen, self.font, self.ach, int(self.ach_scroll))
 
         pygame.display.flip()
 
