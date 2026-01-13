@@ -8,11 +8,12 @@ from shop import ShopUI
 from bag import BagUI
 import save
 import evolution
-from config import asset_path
+from config import asset_path, base_path
 from pg_utils import load_font, load_image, load_sound, play_music
 from achievements import AchievementsManager, draw_toasts
 from achievements_ui import AchievementsUI
 from pathlib import Path
+from start_flow import StartFlow
 
 
 WIDTH = 400
@@ -63,10 +64,9 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        self.scene = "NAMING"
-        self.input_name = ""
-        self.cursor_visible = True
-        self.cursor_timer = 0
+        self.app_mode = "START_FLOW"
+        self.difficulty = "normal"
+        self.flow = StartFlow(self.screen, assets_root=os.path.join(base_path(), "assets"))
 
         self.back_image = self.load_image(BACK_IMAGE)
         self.back_image = pygame.transform.scale(self.back_image, (WIDTH, HEIGHT))
@@ -111,6 +111,10 @@ class Game:
         self.evolve_menu_timer = 0
 
         self.load_saved_game()
+        if self.cat:
+            self.app_mode = "GAME"
+        else:
+            self.app_mode = "START_FLOW"
 
     def load_saved_game(self):
         data = save.load_game()
@@ -156,12 +160,45 @@ class Game:
 
     def run(self):
         while self.running:
-            self.clock.tick(FPS)
-            self.handle_events()
+            dt = self.clock.tick(FPS) / 1000.0
+            events = pygame.event.get()
+            self.handle_events(events)
+
+            if self.app_mode == "START_FLOW":
+                self.flow.update(dt)
+                self.flow.draw()
+                if self.flow.done and self.flow.result:
+                    self.start_new_game(self.flow.result.get("name", ""), self.flow.result.get("difficulty", "normal"))
+                pygame.display.flip()
+                continue
+
             self.draw()
 
         pygame.quit()
         sys.exit()
+
+    def start_new_game(self, name: str, difficulty: str = "normal"):
+        name = str(name or "").strip()
+        if not name:
+            return
+
+        self.difficulty = str(difficulty or "normal")
+
+        self.state = state.GameState()
+        if not hasattr(self.state, "minigame_used"):
+            self.state.minigame_used = {"jump": False, "memory": False}
+
+        self.cat = Cat(name, "아기고양이")
+        self.inventory = {}
+        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.panel_open = False
+        self.left_panel_open = False
+        self.game_over_reason = None
+        self.ending_log = {}
+
+        self.scene = "MAIN"
+        self.app_mode = "GAME"
+        save.save_game(self.make_save_data())
 
     def advance_time(self):
         phase = self.state.advance_time()
@@ -245,13 +282,14 @@ class Game:
     def restart_game(self):
         self.state = state.GameState()
         self.cat = None
-        self.input_name = ""
-        self.scene = "NAMING"
         self.panel_open = False
+        self.left_panel_open = False
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.flow.reset_to_start()
+        self.app_mode = "START_FLOW"
 
     def make_save_data(self):
         try:
@@ -559,17 +597,17 @@ class Game:
                     actions[i]()
                     return
 
-    def handle_events(self):
-        for event in pygame.event.get():
+    def handle_events(self, events):
+        for event in events:
             if event.type == pygame.QUIT:
-                if self.scene == "MAIN" and self.cat:
+                if self.app_mode == "GAME" and self.scene == "MAIN" and self.cat:
                     save.save_game(self.make_save_data())
                 self.running = False
 
-            elif event.type == pygame.TEXTINPUT and self.scene == "NAMING":
-                for ch in event.text:
-                    if len(self.input_name) < 10:
-                        self.input_name += ch
+            if self.app_mode == "START_FLOW":
+                if event.type != pygame.QUIT:
+                    self.flow.handle_event(event)
+                continue
 
             elif event.type == pygame.KEYDOWN:
                 if self.scene == "GAME_OVER":
@@ -581,13 +619,6 @@ class Game:
 
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
-
-                if self.scene == "NAMING":
-                    if event.key == pygame.K_BACKSPACE:
-                        self.input_name = self.input_name[:-1]
-                    elif event.key == pygame.K_RETURN and self.input_name.strip():
-                        self.cat = Cat(self.input_name.strip(), "아기고양이")
-                        self.scene = "MAIN"
 
             elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
                 self.handle_click_main(event.pos)
@@ -634,31 +665,6 @@ class Game:
             color,
             (x + 2, y + 2, max(0, fill - 4), BAR_HEIGHT - 4)
         )
-
-    def draw_naming(self):
-        self.screen.blit(self.back_image, self.back_rect)
-
-        title = self.big_font.render("고양이 이름을 지어주세요", True, (0, 0, 0))
-        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 250))
-
-        box_rect = pygame.Rect(70, 300, 260, 44)
-        pygame.draw.rect(self.screen, (255, 255, 255), box_rect)
-        pygame.draw.rect(self.screen, (0, 0, 0), box_rect, 2)
-
-        name_surface = self.big_font.render(self.input_name, True, (0, 0, 0))
-        self.screen.blit(name_surface, (box_rect.x + 12, box_rect.y + 8))
-
-        self.cursor_timer += 1
-        if self.cursor_timer % 30 == 0:
-            self.cursor_visible = not self.cursor_visible
-
-        if self.cursor_visible:
-            cursor_x = box_rect.x + 12 + name_surface.get_width() + 2
-            cursor_y = box_rect.y + 8
-            pygame.draw.line(self.screen, (0, 0, 0), (cursor_x, cursor_y), (cursor_x, cursor_y + 26), 2)
-
-        hint = self.hint_font.render("Enter 키를 눌러 확정", True, (120, 120, 120))
-        self.screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, box_rect.y + 52))
 
     def draw_game_over(self):
         self.screen.blit(self.back_image, self.back_rect)
@@ -739,13 +745,6 @@ class Game:
 
         if self.scene == "GAME_OVER":
             self.draw_game_over()
-            if self.ach:
-                draw_toasts(self.screen, self.font, self.ach)
-            pygame.display.flip()
-            return
-
-        if self.scene == "NAMING":
-            self.draw_naming()
             if self.ach:
                 draw_toasts(self.screen, self.font, self.ach)
             pygame.display.flip()
