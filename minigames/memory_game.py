@@ -3,6 +3,7 @@ import random
 import os
 
 from config import asset_path
+from pg_utils import load_font
 
 WIDTH = 400
 HEIGHT = 600
@@ -25,12 +26,8 @@ class MemoryGame:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        try:
-            self.font = pygame.font.Font(FONT_PATH, 22)
-            self.small_font = pygame.font.Font(FONT_PATH, 16)
-        except:
-            self.font = pygame.font.Font(None, 22)
-            self.small_font = pygame.font.Font(None, 16)
+        self.font = load_font(FONT_PATH, 22)
+        self.small_font = load_font(FONT_PATH, 16)
 
         self.cards = []
         self.first = None

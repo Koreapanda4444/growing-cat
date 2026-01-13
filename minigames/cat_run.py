@@ -4,6 +4,7 @@ import sys
 import os
 
 from config import asset_path
+from pg_utils import load_font
 
 ASSET_DIR = asset_path("minigames", "cat_run")
 FONT_PATH = asset_path("minigames", "cat_run", "fonts", "ThinDungGeunMo.ttf")
@@ -21,10 +22,7 @@ class CatRunGame:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        try:
-            self.font = pygame.font.Font(FONT_PATH, 18)
-        except:
-            self.font = pygame.font.SysFont(None, 24)
+        self.font = load_font(FONT_PATH, 18)
 
         try:
             self.bg = pygame.image.load(os.path.join(ASSET_DIR, "grass.png")).convert()

@@ -1,8 +1,8 @@
 import pygame
 import save
-import os
 
 from config import asset_path
+from pg_utils import load_font
 
 WIDTH = 400
 HEIGHT = 600
@@ -14,12 +14,8 @@ class SettingsScreen:
         self.restart_callback = restart_callback
         self.running = True
 
-        try:
-            self.font = pygame.font.Font(FONT_PATH, 18)
-            self.big_font = pygame.font.Font(FONT_PATH, 22)
-        except:
-            self.font = pygame.font.Font(None, 20)
-            self.big_font = pygame.font.Font(None, 26)
+        self.font = load_font(FONT_PATH, 18)
+        self.big_font = load_font(FONT_PATH, 22)
 
         self.reset_rect = pygame.Rect(100, 300, 200, 44)
         self.back_rect = pygame.Rect(100, 360, 200, 36)

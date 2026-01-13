@@ -1,7 +1,7 @@
 import pygame
-import os
 
 from config import asset_path
+from pg_utils import load_font
 
 WIDTH = 400
 HEIGHT = 600
@@ -20,12 +20,8 @@ class BagUI:
         self.play_click_sound = play_click_sound
         self.running = True
 
-        try:
-            self.font = pygame.font.Font(FONT_PATH, 18)
-            self.big_font = pygame.font.Font(FONT_PATH, 22)
-        except:
-            self.font = pygame.font.Font(None, 18)
-            self.big_font = pygame.font.Font(None, 22)
+        self.font = load_font(FONT_PATH, 18)
+        self.big_font = load_font(FONT_PATH, 22)
 
         self.close_rect = pygame.Rect(360, 10, 30, 30)
         self.item_rects = []

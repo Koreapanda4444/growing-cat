@@ -5,6 +5,7 @@ from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 
 from config import asset_path
+from pg_utils import load_font
 
 WIDTH = 400
 HEIGHT = 600
@@ -20,12 +21,8 @@ class MiniGameScreen:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        try:
-            self.font = pygame.font.Font(FONT_PATH, 18)
-            self.big_font = pygame.font.Font(FONT_PATH, 22)
-        except:
-            self.font = pygame.font.Font(None, 18)
-            self.big_font = pygame.font.Font(None, 22)
+        self.font = load_font(FONT_PATH, 18)
+        self.big_font = load_font(FONT_PATH, 22)
 
         self.selected = None
 

@@ -9,6 +9,7 @@ from bag import BagUI
 import save
 import evolution
 from config import asset_path
+from pg_utils import load_font, load_image, load_sound, play_music
 
 
 WIDTH = 400
@@ -53,11 +54,9 @@ class Game:
 
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
 
-        try:
-            icon_surface = pygame.image.load(asset_path("icon", "icon.png")).convert_alpha()
+        icon_surface = load_image(asset_path("icon", "icon.png"), alpha=True)
+        if icon_surface is not None:
             pygame.display.set_icon(icon_surface)
-        except:
-            pass
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -70,44 +69,21 @@ class Game:
         self.back_image = pygame.transform.scale(self.back_image, (WIDTH, HEIGHT))
         self.back_rect = self.back_image.get_rect(topleft=(0, 0))
 
-        try:
-            self.coin_image = pygame.image.load(asset_path("ui", "coin.png")).convert_alpha()
-            self.coin_image = pygame.transform.smoothscale(self.coin_image, (36, 36))
-        except:
-            self.coin_image = None
+        self.coin_image = load_image(asset_path("ui", "coin.png"), size=(36, 36), smooth=True, alpha=True)
 
-        try:
-            self.click_sound = pygame.mixer.Sound(asset_path("sounds", "button.mp3"))
-            self.click_sound.set_volume(0.25)
-        except:
-            self.click_sound = None
+        self.click_sound = load_sound(asset_path("sounds", "button.mp3"), volume=0.25)
 
-        try:
-            pygame.mixer.music.load(asset_path("sounds", "bgm.mp3"))
-            pygame.mixer.music.set_volume(1)
-            pygame.mixer.music.play(-1)
-        except:
-            pass
+        play_music(asset_path("sounds", "bgm.mp3"), volume=1, loops=-1)
 
         pygame.font.init()
-        try:
-            self.font = pygame.font.Font(FONT_PATH, 18)
-            self.name_font = pygame.font.Font(FONT_PATH, 18)
-            self.big_font = pygame.font.Font(FONT_PATH, 22)
-            self.panel_font = pygame.font.Font(FONT_PATH, 17)
-            self.tab_font = pygame.font.Font(FONT_PATH, 18)
-            self.stat_font = pygame.font.Font(FONT_PATH, 16)
-            self.hint_font = pygame.font.Font(FONT_PATH, 16)
-            self.coin_font = pygame.font.Font(FONT_PATH, 20)
-        except:
-            self.font = pygame.font.Font(None, 18)
-            self.name_font = pygame.font.Font(None, 18)
-            self.big_font = pygame.font.Font(None, 22)
-            self.panel_font = pygame.font.Font(None, 17)
-            self.tab_font = pygame.font.Font(None, 18)
-            self.stat_font = pygame.font.Font(None, 16)
-            self.hint_font = pygame.font.Font(None, 16)
-            self.coin_font = pygame.font.Font(None, 20)
+        self.font = load_font(FONT_PATH, 18)
+        self.name_font = load_font(FONT_PATH, 18)
+        self.big_font = load_font(FONT_PATH, 22)
+        self.panel_font = load_font(FONT_PATH, 17)
+        self.tab_font = load_font(FONT_PATH, 18)
+        self.stat_font = load_font(FONT_PATH, 16)
+        self.hint_font = load_font(FONT_PATH, 16)
+        self.coin_font = load_font(FONT_PATH, 20)
 
         self.state = state.GameState()
         self.cat = None
