@@ -9,7 +9,7 @@ class GameState:
         self.day = 1
         self.time_phase = MORNING
         self.money = 0
-        self.minigame_used = {"jump": False, "memory": False}
+        self.minigame_used = {"jump": False, "memory": False, "footsteps": False}
 
     def advance_time(self):
         if self.time_phase == MORNING:

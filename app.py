@@ -105,7 +105,7 @@ class Game:
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         if not hasattr(self.state, "minigame_used"):
-            self.state.minigame_used = {"jump": False, "memory": False}
+            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False}
         self.evolve_timer = 0
 
         self.evolve_menu_timer = 0
@@ -148,7 +148,7 @@ class Game:
             self.inventory = {k: max(0, int(v)) for k, v in raw_inv.items() if isinstance(k, str)}
         else:
             self.inventory = {}
-        self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False})
+        self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False, "footsteps": False})
         self.scene = "MAIN"
 
     def load_image(self, filename):
@@ -186,7 +186,7 @@ class Game:
 
         self.state = state.GameState()
         if not hasattr(self.state, "minigame_used"):
-            self.state.minigame_used = {"jump": False, "memory": False}
+            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False}
 
         self.cat = Cat(name, "아기고양이")
         self.inventory = {}
@@ -223,7 +223,7 @@ class Game:
                     pass
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
-        self.state.minigame_used = {"jump": False, "memory": False}
+        self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False}
 
         evolved = False
         while True:
@@ -307,7 +307,7 @@ class Game:
             "time_phase": self.state.time_phase,
             "money": clean_money,
             "inventory": clean_inventory,
-            "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False}),
+            "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False, "footsteps": False}),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
