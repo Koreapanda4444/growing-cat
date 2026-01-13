@@ -3,9 +3,6 @@ import pygame
 from config import asset_path
 from pg_utils import load_font
 
-WIDTH = 400
-HEIGHT = 600
-
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
 BORDER = (0, 0, 0)
@@ -38,7 +35,8 @@ class AchievementsUI:
             self.draw()
 
     def _max_scroll(self, items_count: int) -> int:
-        view_h = HEIGHT - self.list_top - self.list_bottom_pad
+        _, screen_h = self.screen.get_size()
+        view_h = screen_h - self.list_top - self.list_bottom_pad
         content_h = items_count * self.row_h
         return max(0, int(content_h - view_h))
 
@@ -89,6 +87,9 @@ class AchievementsUI:
             self.screen.blit(meta, (20, 52))
 
     def draw_list(self):
+        screen_w, screen_h = self.screen.get_size()
+        list_rect = pygame.Rect(0, self.list_top, screen_w, screen_h - self.list_top - self.list_bottom_pad)
+
         if not self.ach:
             msg = self.font.render("업적 데이터를 불러올 수 없습니다.", True, (80, 80, 80))
             self.screen.blit(msg, (20, self.list_top))
@@ -97,14 +98,17 @@ class AchievementsUI:
         items = self.ach.get_list()
         y = self.list_top - int(self.scroll)
 
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(list_rect)
+
         for it in items:
-            if y < -self.row_h:
+            if y < self.list_top - self.row_h:
                 y += self.row_h
                 continue
-            if y > HEIGHT + self.row_h:
+            if y > screen_h + self.row_h:
                 break
 
-            rect = pygame.Rect(20, y, WIDTH - 40, self.row_h - 8)
+            rect = pygame.Rect(20, y, screen_w - 40, self.row_h - 8)
             if it.get("unlocked"):
                 pygame.draw.rect(self.screen, (190, 235, 205), rect)
             else:
@@ -117,6 +121,8 @@ class AchievementsUI:
             self.screen.blit(desc, (rect.x + 10, rect.y + 30))
 
             y += self.row_h
+
+        self.screen.set_clip(old_clip)
 
     def draw(self):
         self.screen.fill(BG_COLOR)
