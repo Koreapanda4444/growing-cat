@@ -92,7 +92,7 @@ def _dpapi_unprotect(data: bytes) -> bytes:
     out_blob = _DATA_BLOB()
     entropy_blob = _bytes_to_blob(_entropy())
 
-    ok = ctypes.windll.crypt32.CryptUnprotectData(  # type: ignore[attr-defined]
+    ok = ctypes.windll.crypt32.CryptUnprotectData(
         ctypes.byref(in_blob),
         None,
         ctypes.byref(entropy_blob),

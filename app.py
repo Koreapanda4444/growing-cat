@@ -10,7 +10,8 @@ import save
 import evolution
 from config import asset_path
 from pg_utils import load_font, load_image, load_sound, play_music
-from achievements import AchievementsManager, draw_toasts, draw_achievements_panel
+from achievements import AchievementsManager, draw_toasts
+from achievements_ui import AchievementsUI
 from pathlib import Path
 
 
@@ -95,8 +96,6 @@ class Game:
             self.ach = AchievementsManager(str(base / "achievements_save.json"))
         except Exception:
             self.ach = AchievementsManager()
-        self.show_achievements = False
-        self.ach_scroll = 0
 
         self.cat = None
         self.panel_open = False
@@ -307,6 +306,11 @@ class Game:
     def open_bag(self):
         BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
         save.save_game(self.make_save_data())
+
+    def open_achievements(self):
+        self.panel_open = False
+        self.left_panel_open = False
+        AchievementsUI(self.screen, self.ach, self.play_click_sound).run()
 
     def open_evolve_menu(self):
         if not self.cat:
@@ -541,9 +545,9 @@ class Game:
                 self.left_panel_open = False
                 return
 
-            labels = ["설정", "미니게임", "상점", "가방"]
-            actions = [self.open_settings, self.open_minigame, self.open_shop, self.open_bag]
-            for i in range(4):
+            labels = ["설정", "미니게임", "상점", "가방", "업적"]
+            actions = [self.open_settings, self.open_minigame, self.open_shop, self.open_bag, self.open_achievements]
+            for i in range(5):
                 r = pygame.Rect(
                     panel_x,
                     PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
@@ -568,23 +572,6 @@ class Game:
                         self.input_name += ch
 
             elif event.type == pygame.KEYDOWN:
-                # 업적 패널 토글/조작 (MAIN에서만)
-                if self.scene == "MAIN":
-                    if event.key == pygame.K_a:
-                        self.show_achievements = not self.show_achievements
-                        return
-
-                    if self.show_achievements:
-                        if event.key == pygame.K_ESCAPE:
-                            self.show_achievements = False
-                            return
-                        if event.key == pygame.K_UP:
-                            self.ach_scroll = max(0, int(self.ach_scroll) - 40)
-                            return
-                        if event.key == pygame.K_DOWN:
-                            self.ach_scroll = int(self.ach_scroll) + 40
-                            return
-
                 if self.scene == "GAME_OVER":
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
@@ -603,8 +590,7 @@ class Game:
                         self.scene = "MAIN"
 
             elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
-                if not self.show_achievements:
-                    self.handle_click_main(event.pos)
+                self.handle_click_main(event.pos)
 
             elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "EVOLVE_MENU":
                 self.handle_click_evolve_menu(event.pos)
@@ -770,6 +756,8 @@ class Game:
         info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
         self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
 
+
+
         money = getattr(self.state, "money", 0)
         if self.coin_image:
             self.screen.blit(self.coin_image, (INFO_X, INFO_Y + 22))
@@ -828,7 +816,7 @@ class Game:
             panel_x = 8
             left_close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
             self.draw_button(left_close_rect, "닫기 ◀", self.panel_font)
-            labels = ["설정", "미니게임", "상점", "가방"]
+            labels = ["설정", "미니게임", "상점", "가방", "업적"]
             for i, label in enumerate(labels):
                 r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
                 self.draw_button(r, label, self.panel_font)
@@ -839,8 +827,6 @@ class Game:
 
         if self.ach:
             draw_toasts(self.screen, self.font, self.ach)
-            if self.show_achievements:
-                draw_achievements_panel(self.screen, self.font, self.ach, int(self.ach_scroll))
 
         pygame.display.flip()
 
