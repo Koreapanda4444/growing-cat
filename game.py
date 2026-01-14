@@ -3,14 +3,14 @@ import sys
 import os
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
-from minigames.footsteps import FootstepsGame
+from minigames.cat_follow import CatFollowGame
 
 from config import asset_path
 from pg_utils import load_font
 
 WIDTH = 400
 HEIGHT = 600
-FPS = 60
+FPS = 60    
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
@@ -113,7 +113,7 @@ class MiniGameScreen:
                     if self.ach:
                         self.ach.on_event("minigame_played")
 
-                    result = FootstepsGame(self.screen, self.state, self.ach).run()
+                    result = CatFollowGame(self.screen, self.state, self.ach).run()
                     if isinstance(result, dict):
                         try:
                             coins = int(result.get("coins", 0))
@@ -157,7 +157,7 @@ class MiniGameScreen:
         used_footsteps = getattr(self.state, "minigame_used", {}).get("footsteps", False) if self.state else False
         self.draw_card(self.card_avoid, "장애물 피하기", self.selected == "jump", used_jump)
         self.draw_card(self.card_memory, "메모리 게임", self.selected == "memory", used_memory)
-        self.draw_card(self.card_footsteps, "발자국 따라가기", self.selected == "footsteps", used_footsteps)
+        self.draw_card(self.card_footsteps, "고양이 따라가기", self.selected == "footsteps", used_footsteps)
 
         pygame.draw.rect(self.screen, (200, 200, 200), self.btn_start)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_start, 1)

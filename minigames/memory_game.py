@@ -197,6 +197,9 @@ class MemoryGame:
                 if event.type == pygame.QUIT:
                     self.running = False
 
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.running = False
+
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
 
