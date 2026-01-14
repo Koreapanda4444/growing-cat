@@ -382,15 +382,15 @@ class Game:
         lines.append(f"비용: {cost} 코인")
 
         if stage == evolution.BABY:
-            lines.append("조건: 14일 이상")
+            lines.append("조건: 7일 이상")
         elif stage == evolution.ADULT:
-            lines.append("조건: 30일 이상")
+            lines.append("조건: 21일 이상")
             lines.append(f"아이템: 고기 1개 (보유: {self.inventory.get('고기', 0)})")
-            lines.append("스탯: 행복 80↑, 피로 20↓, 청결 70↑, 배고픔 30↓")
+            lines.append("스탯: 행복 75↑, 피로 25↓, 청결 75↑, 배고픔 25↓")
         elif stage == evolution.LION:
-            lines.append("조건: 50일 이상")
+            lines.append("조건: 35일 이상")
             lines.append(f"아이템: 뼈 1개 (보유: {self.inventory.get('뼈', 0)})")
-            lines.append("스탯: 행복 90↑, 피로 10↓, 청결 80↑, 배고픔 20↓")
+            lines.append("스탯: 행복 80↑, 피로 15↓, 청결 80↑, 배고픔 15↓")
         else:
             lines.append("조건: -")
 
