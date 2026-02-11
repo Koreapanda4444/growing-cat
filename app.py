@@ -14,7 +14,8 @@ from achievements import AchievementsManager, draw_toasts
 from achievements_ui import AchievementsUI
 from pathlib import Path
 from start_flow import StartFlow
-
+from pause_menu import PauseMenu
+from photo_mode import take_photo
 
 WIDTH = 400
 HEIGHT = 600
@@ -64,6 +65,14 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
+        self.paused = False
+        self.pause_menu = None
+        self.request_quit = False
+        self.request_to_start = False
+
+        self.toast_text = ""
+        self.toast_timer = 0.0
+
         self.app_mode = "START_FLOW"
         self.difficulty = "normal"
         self.flow = StartFlow(self.screen, assets_root=os.path.join(base_path(), "assets"))
@@ -87,6 +96,8 @@ class Game:
         self.stat_font = load_font(FONT_PATH, 16)
         self.hint_font = load_font(FONT_PATH, 16)
         self.coin_font = load_font(FONT_PATH, 20)
+
+        self.pause_menu = PauseMenu(self.screen)
 
         self.state = state.GameState()
 
@@ -164,6 +175,16 @@ class Game:
             events = pygame.event.get()
             self.handle_events(events)
 
+            if self.request_quit:
+                self.running = False
+                continue
+
+            if self.request_to_start:
+                self.request_to_start = False
+                self.paused = False
+                self.restart_game()
+                continue
+
             if self.app_mode == "START_FLOW":
                 self.flow.update(dt)
                 self.flow.draw()
@@ -171,6 +192,8 @@ class Game:
                     self.start_new_game(self.flow.result.get("name", ""), self.flow.result.get("difficulty", "normal"))
                 pygame.display.flip()
                 continue
+
+            self.update(dt)
 
             self.draw()
 
@@ -609,7 +632,33 @@ class Game:
                     self.flow.handle_event(event)
                 continue
 
-            elif event.type == pygame.KEYDOWN:
+            if self.app_mode == "GAME" and self.scene != "GAME_OVER":
+                if (event.type == pygame.KEYDOWN) and (event.key == pygame.K_ESCAPE):
+                    self.paused = not self.paused
+                    continue
+
+                if self.paused:
+                    if event.type == pygame.QUIT:
+                        continue
+
+                    action = self.pause_menu.handle_event(event) if self.pause_menu else None
+                    if action == "resume":
+                        self.paused = False
+                    elif action == "settings":
+                        self.open_settings()
+                    elif action == "to_start":
+                        self.request_to_start = True
+                    elif action == "quit":
+                        self.request_quit = True
+                    elif action == "photo":
+                        self._take_photo_toast()
+                    continue
+
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_F12:
+                    self._take_photo_toast()
+                    continue
+
+            if event.type == pygame.KEYDOWN:
                 if self.scene == "GAME_OVER":
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
@@ -617,18 +666,55 @@ class Game:
                         self.restart_game()
                         return
 
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
+                if self.scene == "EVOLVE_MENU":
+                    if event.key == pygame.K_ESCAPE:
+                        self.scene = "MAIN"
 
-            elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
+            if event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
                 self.handle_click_main(event.pos)
 
-            elif event.type == pygame.MOUSEBUTTONDOWN and self.scene == "EVOLVE_MENU":
+            if event.type == pygame.MOUSEBUTTONDOWN and self.scene == "EVOLVE_MENU":
                 self.handle_click_evolve_menu(event.pos)
 
-            elif event.type == pygame.KEYDOWN and self.scene == "EVOLVE_MENU":
-                if event.key == pygame.K_ESCAPE:
-                    self.scene = "MAIN"
+    def update(self, dt: float):
+        if self.toast_timer > 0.0:
+            self.toast_timer = max(0.0, float(self.toast_timer) - float(dt))
+
+        if self.paused:
+            return
+
+    def _take_photo_toast(self):
+        if not self.cat:
+            path = take_photo(self.screen, player_name="player")
+        else:
+            path = take_photo(
+                self.screen,
+                player_name=getattr(self.cat, "name", "player") or "player",
+                day=getattr(self.state, "day", None),
+                stage=getattr(self.cat, "stage", None),
+            )
+
+        self.toast_text = f"사진 저장됨: {os.path.basename(path)}"
+        self.toast_timer = 2.5
+
+    def _draw_photo_toast(self):
+        if self.toast_timer <= 0.0 or not self.toast_text:
+            return
+
+        text = self.toast_text
+        font = self.hint_font if hasattr(self, "hint_font") and self.hint_font else self.font
+        label = font.render(text, True, (255, 255, 255))
+
+        pad_x, pad_y = 10, 8
+        bg_w = label.get_width() + pad_x * 2
+        bg_h = label.get_height() + pad_y * 2
+        bg = pygame.Surface((bg_w, bg_h), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 170))
+        bg.blit(label, (pad_x, pad_y))
+
+        x = 12
+        y = self.screen.get_height() - bg_h - 12
+        self.screen.blit(bg, (x, y))
 
     def handle_click_evolve_menu(self, pos):
         panel_w, panel_h = 340, 260
@@ -733,6 +819,10 @@ class Game:
             self.draw_evolve()
             if self.ach:
                 draw_toasts(self.screen, self.font, self.ach)
+
+            if self.paused and self.pause_menu:
+                self.pause_menu.draw()
+            self._draw_photo_toast()
             pygame.display.flip()
             return
 
@@ -740,6 +830,10 @@ class Game:
             self.draw_evolve_menu()
             if self.ach:
                 draw_toasts(self.screen, self.font, self.ach)
+
+            if self.paused and self.pause_menu:
+                self.pause_menu.draw()
+            self._draw_photo_toast()
             pygame.display.flip()
             return
 
@@ -747,6 +841,8 @@ class Game:
             self.draw_game_over()
             if self.ach:
                 draw_toasts(self.screen, self.font, self.ach)
+
+            self._draw_photo_toast()
             pygame.display.flip()
             return
 
@@ -827,10 +923,15 @@ class Game:
         if self.ach:
             draw_toasts(self.screen, self.font, self.ach)
 
+        if self.paused and self.pause_menu:
+            self.pause_menu.draw()
+        self._draw_photo_toast()
+
         pygame.display.flip()
 
     def draw_evolve(self):
-        self.evolve_timer += 1
+        if not self.paused:
+            self.evolve_timer += 1
         self.screen.fill((0, 0, 0))
 
         text1 = self.big_font.render("진화 성공!", True, (255, 255, 255))
