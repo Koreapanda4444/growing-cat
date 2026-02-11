@@ -116,7 +116,7 @@ class Game:
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         if not hasattr(self.state, "minigame_used"):
-            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False}
+            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
         self.evolve_timer = 0
 
         self.evolve_menu_timer = 0
@@ -160,6 +160,8 @@ class Game:
         else:
             self.inventory = {}
         self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False, "footsteps": False})
+        if isinstance(self.state.minigame_used, dict) and "laser" not in self.state.minigame_used:
+            self.state.minigame_used["laser"] = False
         self.scene = "MAIN"
 
     def load_image(self, filename):
@@ -209,7 +211,7 @@ class Game:
 
         self.state = state.GameState()
         if not hasattr(self.state, "minigame_used"):
-            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False}
+            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
 
         self.cat = Cat(name, "아기고양이")
         self.inventory = {}
@@ -246,7 +248,7 @@ class Game:
                     pass
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
-        self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False}
+        self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
 
         evolved = False
         while True:
@@ -330,7 +332,7 @@ class Game:
             "time_phase": self.state.time_phase,
             "money": clean_money,
             "inventory": clean_inventory,
-            "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False, "footsteps": False}),
+            "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False, "footsteps": False, "laser": False}),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,

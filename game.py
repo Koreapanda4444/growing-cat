@@ -4,6 +4,7 @@ import os
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 from minigames.cat_follow import CatFollowGame
+from minigames.laser_chase import run_laser_chase
 
 from config import asset_path
 from pg_utils import load_font
@@ -29,10 +30,11 @@ class MiniGameScreen:
         self.selected = None
 
         self.btn_close = pygame.Rect(350, 10, 36, 36)
-        self.card_avoid = pygame.Rect(40, 130, 320, 100)
-        self.card_memory = pygame.Rect(40, 250, 320, 100)
-        self.card_footsteps = pygame.Rect(40, 370, 320, 100)
-        self.btn_start = pygame.Rect(260, 510, 110, 36)
+        self.card_avoid = pygame.Rect(40, 120, 320, 90)
+        self.card_memory = pygame.Rect(40, 220, 320, 90)
+        self.card_footsteps = pygame.Rect(40, 320, 320, 90)
+        self.card_laser = pygame.Rect(40, 420, 320, 90)
+        self.btn_start = pygame.Rect(260, 525, 110, 36)
 
     def run(self):
         while self.running:
@@ -57,6 +59,8 @@ class MiniGameScreen:
             self.selected = "memory"
         elif self.card_footsteps.collidepoint(pos):
             self.selected = "footsteps"
+        elif self.card_laser.collidepoint(pos):
+            self.selected = "laser"
         elif self.btn_start.collidepoint(pos):
             if self.selected:
                 if self.selected == "jump" and self.state:
@@ -132,6 +136,31 @@ class MiniGameScreen:
                             self.ach.on_event("minigame_won")
 
                     self.state.minigame_used["footsteps"] = True
+                elif self.selected == "laser" and self.state:
+                    if getattr(self.state, "minigame_used", {}).get("laser"):
+                        return
+                    if self.ach:
+                        self.ach.on_event("minigame_played")
+
+                    result = run_laser_chase(self.screen, ach=self.ach)
+                    if isinstance(result, dict):
+                        try:
+                            coins = int(result.get("coins", 0))
+                        except (TypeError, ValueError):
+                            coins = 0
+                        coins = max(0, coins)
+                        if coins:
+                            try:
+                                self.state.money = max(0, int(self.state.money) + coins)
+                            except (TypeError, ValueError):
+                                self.state.money = coins
+                            if self.ach:
+                                self.ach.on_event("coins_earned", amount=coins)
+
+                        if self.ach and bool(result.get("won")):
+                            self.ach.on_event("minigame_won")
+
+                    self.state.minigame_used["laser"] = True
                 self.running = False
 
     def draw_card(self, rect, title, selected=False, disabled=False):
@@ -155,9 +184,11 @@ class MiniGameScreen:
         used_jump = getattr(self.state, "minigame_used", {}).get("jump", False) if self.state else False
         used_memory = getattr(self.state, "minigame_used", {}).get("memory", False) if self.state else False
         used_footsteps = getattr(self.state, "minigame_used", {}).get("footsteps", False) if self.state else False
+        used_laser = getattr(self.state, "minigame_used", {}).get("laser", False) if self.state else False
         self.draw_card(self.card_avoid, "장애물 피하기", self.selected == "jump", used_jump)
         self.draw_card(self.card_memory, "메모리 게임", self.selected == "memory", used_memory)
         self.draw_card(self.card_footsteps, "고양이 따라가기", self.selected == "footsteps", used_footsteps)
+        self.draw_card(self.card_laser, "레이저 포인터", self.selected == "laser", used_laser)
 
         pygame.draw.rect(self.screen, (200, 200, 200), self.btn_start)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_start, 1)
