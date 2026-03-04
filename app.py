@@ -134,6 +134,8 @@ class Game:
 
         self.state.day = max(1, int(data.get("day", 1)))
         self.state.time_phase = data.get("time_phase", state.MORNING)
+        self.difficulty = state.normalize_difficulty(data.get("difficulty", "normal"))
+        self.state.difficulty = self.difficulty
 
         cat_data = data.get("cat")
         if not isinstance(cat_data, dict):
@@ -144,7 +146,7 @@ class Game:
         if not isinstance(name, str) or not isinstance(stage, str):
             return
 
-        self.cat = Cat(name, stage)
+        self.cat = Cat(name, stage, difficulty=self.difficulty)
         try:
             self.cat.hunger = state.clamp(float(cat_data.get("hunger", 50)))
             self.cat.tiredness = state.clamp(float(cat_data.get("tiredness", 20)))
@@ -207,13 +209,13 @@ class Game:
         if not name:
             return
 
-        self.difficulty = str(difficulty or "normal")
+        self.difficulty = state.normalize_difficulty(difficulty)
 
-        self.state = state.GameState()
+        self.state = state.GameState(self.difficulty)
         if not hasattr(self.state, "minigame_used"):
             self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
 
-        self.cat = Cat(name, "아기고양이")
+        self.cat = Cat(name, "아기고양이", difficulty=self.difficulty)
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.panel_open = False
@@ -231,11 +233,12 @@ class Game:
             self.cat.on_night()
         else:
             self.cat.on_morning()
-            self.state.money = max(0, int(self.state.money + 5))
+            day_reward = state.get_day_coin_reward(self.difficulty)
+            self.state.money = max(0, int(self.state.money + day_reward))
 
             if self.ach:
                 self.ach.on_event("day_end")
-                self.ach.on_event("coins_earned", amount=5)
+                self.ach.on_event("coins_earned", amount=day_reward)
                 try:
                     stats = {
                         "happiness": int(self.cat.happiness),
@@ -254,9 +257,11 @@ class Game:
         while True:
             has_meat = self.inventory.get("고기", 0) > 0
             has_bone = self.inventory.get("뼈", 0) > 0
-            can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone)
+            base_cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
+            evo_cost = state.get_evolution_cost(base_cost, self.difficulty)
+            can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone, cost_override=evo_cost)
             if phase == state.MORNING and can_evo:
-                cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
+                cost = evo_cost
                 if self.state.money >= cost:
                     if self.cat.stage == evolution.ADULT:
                         if self.inventory.get("고기", 0) <= 0:
@@ -306,6 +311,7 @@ class Game:
 
     def restart_game(self):
         self.state = state.GameState()
+        self.difficulty = "normal"
         self.cat = None
         self.panel_open = False
         self.left_panel_open = False
@@ -330,6 +336,7 @@ class Game:
         return {
             "day": max(1, int(self.state.day)),
             "time_phase": self.state.time_phase,
+            "difficulty": state.normalize_difficulty(getattr(self.state, "difficulty", self.difficulty)),
             "money": clean_money,
             "inventory": clean_inventory,
             "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False, "footsteps": False, "laser": False}),
@@ -358,7 +365,7 @@ class Game:
         SettingsScreen(self.screen, self.restart_game).run()
 
     def open_shop(self):
-        shop = ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound)
+        shop = ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound, difficulty=self.difficulty)
         shop.run()
         save.save_game(self.make_save_data())
 
@@ -389,7 +396,16 @@ class Game:
 
         has_meat = self.inventory.get("고기", 0) > 0
         has_bone = self.inventory.get("뼈", 0) > 0
-        can_evo, status_msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone)
+        base_cost = evolution.EVOLUTION_COST.get(stage, 0)
+        cost = state.get_evolution_cost(base_cost, self.difficulty)
+        can_evo, status_msg = evolution.can_evolve(
+            self.cat,
+            self.state.day,
+            self.state.money,
+            has_meat,
+            has_bone,
+            cost_override=cost,
+        )
 
         lines = []
         if not next_stage:
@@ -402,7 +418,6 @@ class Game:
                 "lines": lines,
             }
 
-        cost = evolution.EVOLUTION_COST.get(stage, 0)
         lines.append(f"현재: {stage} → 다음: {next_stage}")
         lines.append(f"비용: {cost} 코인")
 
@@ -435,7 +450,8 @@ class Game:
             return False
 
         stage = self.cat.stage
-        cost = evolution.EVOLUTION_COST.get(stage, 0)
+        base_cost = evolution.EVOLUTION_COST.get(stage, 0)
+        cost = state.get_evolution_cost(base_cost, self.difficulty)
         if self.state.money < cost:
             return False
 
@@ -850,7 +866,8 @@ class Game:
 
         self.screen.blit(self.back_image, self.back_rect)
 
-        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
+        diff_label = state.get_difficulty_label(self.difficulty)
+        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'} ({diff_label})"
         self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
 
 
@@ -948,7 +965,8 @@ class Game:
     def draw_evolve_menu(self):
         self.screen.blit(self.back_image, self.back_rect)
 
-        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'}"
+        diff_label = state.get_difficulty_label(self.difficulty)
+        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'} ({diff_label})"
         self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
 
         money = getattr(self.state, "money", 0)

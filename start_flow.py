@@ -108,6 +108,7 @@ class StartFlow:
         self._load_assets()
         self._rebuild_layout()
         self.name_input: TextInput | None = None
+        self.selected_difficulty = "normal"
 
     def _load_assets(self):
         path = os.path.join(self.assets_root, "ui", "start.png")
@@ -134,9 +135,9 @@ class StartFlow:
         self.btn_start = Button(pygame.Rect(cx, y_start, btn_w, btn_h), "시작하기", self.font_btn)
         y_diff = int(H * 0.62)
         gap = 10
-        self.btn_easy = Button(pygame.Rect(cx, y_diff, btn_w, btn_h), "쉬움 (준비중)", self.font_btn, enabled=False)
+        self.btn_easy = Button(pygame.Rect(cx, y_diff, btn_w, btn_h), "쉬움", self.font_btn, enabled=True)
         self.btn_normal = Button(pygame.Rect(cx, y_diff + (btn_h + gap), btn_w, btn_h), "보통", self.font_btn, enabled=True)
-        self.btn_hard = Button(pygame.Rect(cx, y_diff + 2 * (btn_h + gap), btn_w, btn_h), "어려움 (준비중)", self.font_btn, enabled=False)
+        self.btn_hard = Button(pygame.Rect(cx, y_diff + 2 * (btn_h + gap), btn_w, btn_h), "어려움", self.font_btn, enabled=True)
 
         self.diff_title_y = max(80, int(self.btn_easy.rect.y - 80))
         input_w, input_h = 340, 58
@@ -147,6 +148,7 @@ class StartFlow:
         self.done = False
         self.result = None
         self.name_input = None
+        self.selected_difficulty = "normal"
         self._rebuild_layout()
 
     def handle_event(self, event: pygame.event.Event):
@@ -158,10 +160,18 @@ class StartFlow:
                 self.mode = "DIFF"
 
         elif self.mode == "DIFF":
-            self.btn_easy.handle_event(event)
-            self.btn_hard.handle_event(event)
-
+            if self.btn_easy.handle_event(event):
+                self.selected_difficulty = "easy"
+                self.mode = "NAME"
+                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                return
             if self.btn_normal.handle_event(event):
+                self.selected_difficulty = "normal"
+                self.mode = "NAME"
+                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                return
+            if self.btn_hard.handle_event(event):
+                self.selected_difficulty = "hard"
                 self.mode = "NAME"
                 self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
 
@@ -182,7 +192,7 @@ class StartFlow:
             return
 
         self.done = True
-        self.result = {"difficulty": "normal", "name": name}
+        self.result = {"difficulty": self.selected_difficulty, "name": name}
 
     def update(self, dt: float):
         if self.mode == "NAME" and self.name_input:

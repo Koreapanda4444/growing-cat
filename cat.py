@@ -12,9 +12,10 @@ CAT_IMAGE_DIR = {
 }
 
 class Cat:
-    def __init__(self, name, stage, image_path=None):
+    def __init__(self, name, stage, image_path=None, difficulty="normal"):
         self.name = name
         self.stage = stage
+        self.difficulty = state.normalize_difficulty(difficulty)
 
         self.hunger = random.randint(25, 50)
         self.tiredness = random.randint(5, 25)
@@ -50,48 +51,48 @@ class Cat:
 
     def on_night(self):
         if not self._can_act(): return
-        self.hunger += state.rand_range(state.NIGHT_HUNGER_INC)
-        self.tiredness += state.rand_range(state.NIGHT_TIREDNESS_INC)
-        self.happiness -= state.rand_range(state.NIGHT_HAPPINESS_DEC)
-        self.cleanliness -= state.rand_range(state.NIGHT_CLEANLINESS_DEC)
+        self.hunger += state.rand_range(state.scaled_range(state.NIGHT_HUNGER_INC, self.difficulty, "pressure"))
+        self.tiredness += state.rand_range(state.scaled_range(state.NIGHT_TIREDNESS_INC, self.difficulty, "pressure"))
+        self.happiness -= state.rand_range(state.scaled_range(state.NIGHT_HAPPINESS_DEC, self.difficulty, "pressure"))
+        self.cleanliness -= state.rand_range(state.scaled_range(state.NIGHT_CLEANLINESS_DEC, self.difficulty, "pressure"))
         self._clamp_all()
         self._check_death()
         self._check_runaway()
 
     def on_morning(self):
         if not self._can_act(): return
-        self.hunger += state.rand_range(state.MORNING_HUNGER_INC)
-        self.tiredness -= state.rand_range(state.MORNING_TIREDNESS_DEC)
-        self.happiness += state.rand_range(state.MORNING_HAPPINESS_INC)
-        self.cleanliness -= state.rand_range(state.MORNING_CLEANLINESS_DEC)
+        self.hunger += state.rand_range(state.scaled_range(state.MORNING_HUNGER_INC, self.difficulty, "pressure"))
+        self.tiredness -= state.rand_range(state.scaled_range(state.MORNING_TIREDNESS_DEC, self.difficulty, "recovery"))
+        self.happiness += state.rand_range(state.scaled_range(state.MORNING_HAPPINESS_INC, self.difficulty, "recovery"))
+        self.cleanliness -= state.rand_range(state.scaled_range(state.MORNING_CLEANLINESS_DEC, self.difficulty, "pressure"))
         self._clamp_all()
         self._check_death()
         self._check_runaway()
 
     def feed_free(self):
         if not self._can_act(): return
-        self.hunger -= state.rand_range(state.FREE_FEED_HUNGER_DEC)
-        self.happiness += state.rand_range(state.FREE_FEED_HAPPINESS_INC)
+        self.hunger -= state.rand_range(state.scaled_range(state.FREE_FEED_HUNGER_DEC, self.difficulty, "recovery"))
+        self.happiness += state.rand_range(state.scaled_range(state.FREE_FEED_HAPPINESS_INC, self.difficulty, "recovery"))
         self._clamp_all()
 
     def play_free(self):
         if not self._can_act(): return
-        self.happiness += state.rand_range(state.FREE_PLAY_HAPPINESS_INC)
-        self.tiredness += state.rand_range(state.FREE_PLAY_TIREDNESS_INC)
-        self.hunger += state.rand_range(state.FREE_PLAY_HUNGER_INC)
-        self.cleanliness -= state.rand_range(state.FREE_PLAY_CLEANLINESS_DEC)
+        self.happiness += state.rand_range(state.scaled_range(state.FREE_PLAY_HAPPINESS_INC, self.difficulty, "recovery"))
+        self.tiredness += state.rand_range(state.scaled_range(state.FREE_PLAY_TIREDNESS_INC, self.difficulty, "pressure"))
+        self.hunger += state.rand_range(state.scaled_range(state.FREE_PLAY_HUNGER_INC, self.difficulty, "pressure"))
+        self.cleanliness -= state.rand_range(state.scaled_range(state.FREE_PLAY_CLEANLINESS_DEC, self.difficulty, "pressure"))
         self._clamp_all()
 
     def clean(self):
         if not self._can_act(): return
-        self.cleanliness += state.rand_range(state.CLEAN_CLEANLINESS_INC)
-        self.happiness -= state.rand_range(state.CLEAN_HAPPINESS_DEC)
+        self.cleanliness += state.rand_range(state.scaled_range(state.CLEAN_CLEANLINESS_INC, self.difficulty, "recovery"))
+        self.happiness -= state.rand_range(state.scaled_range(state.CLEAN_HAPPINESS_DEC, self.difficulty, "pressure"))
         self._clamp_all()
 
     def sleep(self):
         if not self._can_act(): return
-        self.tiredness -= state.rand_range(state.SLEEP_TIREDNESS_DEC)
-        self.happiness += state.rand_range(state.SLEEP_HAPPINESS_INC)
+        self.tiredness -= state.rand_range(state.scaled_range(state.SLEEP_TIREDNESS_DEC, self.difficulty, "recovery"))
+        self.happiness += state.rand_range(state.scaled_range(state.SLEEP_HAPPINESS_INC, self.difficulty, "recovery"))
         self._clamp_all()
 
     def _can_act(self):

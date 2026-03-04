@@ -1,4 +1,5 @@
 import pygame
+import state as game_state
 
 from config import asset_path
 from pg_utils import load_font
@@ -13,12 +14,13 @@ BORDER = (0, 0, 0)
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 class ShopUI:
-    def __init__(self, screen, coin, on_buy, play_click_sound=None):
+    def __init__(self, screen, coin, on_buy, play_click_sound=None, difficulty="normal"):
         self.screen = screen
         self.coin = coin
         self.on_buy = on_buy
         self.play_click_sound = play_click_sound
         self.running = True
+        self.difficulty = game_state.normalize_difficulty(difficulty)
 
         self.font = load_font(FONT_PATH, 18)
         self.big_font = load_font(FONT_PATH, 22)
@@ -32,22 +34,28 @@ class ShopUI:
 
         self.items = {
             "FOOD": [
-                {"name": "밥", "price": 30, "id": "bab", "image": asset_path("foods", "bab.png")},
-                {"name": "생선", "price": 50, "id": "fish", "image": asset_path("foods", "fish.png")},
-                {"name": "츄르", "price": 80, "id": "chur", "image": asset_path("foods", "chur.png")},
+                {"name": "밥", "price": 25, "id": "bab", "image": asset_path("foods", "bab.png")},
+                {"name": "생선", "price": 45, "id": "fish", "image": asset_path("foods", "fish.png")},
+                {"name": "츄르", "price": 70, "id": "chur", "image": asset_path("foods", "chur.png")},
             ],
             "TOY": [
-                {"name": "강아지풀", "price": 30, "id": "doggrass", "image": asset_path("toys", "doggrass.png")},
-                {"name": "낚싯대", "price": 50, "id": "fishing", "image": asset_path("toys", "fishing.png")},
-                {"name": "실", "price": 40, "id": "string", "image": asset_path("toys", "string.png")},
+                {"name": "강아지풀", "price": 25, "id": "doggrass", "image": asset_path("toys", "doggrass.png")},
+                {"name": "낚싯대", "price": 65, "id": "fishing", "image": asset_path("toys", "fishing.png")},
+                {"name": "실", "price": 45, "id": "string", "image": asset_path("toys", "string.png")},
             ],
             "EVOLUTION": [
-                {"name": "고기", "price": 100, "id": "meat", "image": asset_path("evolution", "meat.png")},
-                {"name": "뼈", "price": 300, "id": "bone", "image": asset_path("evolution", "bone.png")},
+                {"name": "고기", "price": 120, "id": "meat", "image": asset_path("evolution", "meat.png")},
+                {"name": "뼈", "price": 260, "id": "bone", "image": asset_path("evolution", "bone.png")},
             ]
         }
+        self._apply_difficulty_prices()
 
         self.item_rects = []
+
+    def _apply_difficulty_prices(self):
+        for category in self.items.values():
+            for item in category:
+                item["price"] = game_state.get_shop_price(item["price"], self.difficulty)
 
     def run(self):
         clock = pygame.time.Clock()

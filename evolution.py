@@ -19,12 +19,15 @@ def get_next_stage(stage):
         return None
     return EVOLUTION_ORDER[idx + 1]
 
-def can_evolve(cat, day, coin, has_meat=False, has_bone=False):
+def can_evolve(cat, day, coin, has_meat=False, has_bone=False, cost_override=None):
     next_stage = get_next_stage(cat.stage)
     if not next_stage:
         return False, "최종 단계입니다"
 
-    cost = EVOLUTION_COST[cat.stage]
+    if cost_override is None:
+        cost = EVOLUTION_COST[cat.stage]
+    else:
+        cost = int(cost_override)
     if coin < cost:
         return False, f"코인 {cost} 필요"
 

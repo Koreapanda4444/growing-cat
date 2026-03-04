@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+import state as game_state
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 from minigames.cat_follow import CatFollowGame
@@ -74,6 +75,8 @@ class MiniGameScreen:
                             coins = int(result.get("coins", 0))
                         except (TypeError, ValueError):
                             coins = 0
+                        difficulty = getattr(self.state, "difficulty", "normal")
+                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
                         coins = max(0, coins)
                         try:
                             self.state.money = max(0, int(self.state.money) + coins)
@@ -98,6 +101,8 @@ class MiniGameScreen:
                             coins = int(result.get("coins", 0))
                         except (TypeError, ValueError):
                             coins = 0
+                        difficulty = getattr(self.state, "difficulty", "normal")
+                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
                         coins = max(0, coins)
                         if coins:
                             try:
@@ -123,6 +128,8 @@ class MiniGameScreen:
                             coins = int(result.get("coins", 0))
                         except (TypeError, ValueError):
                             coins = 0
+                        difficulty = getattr(self.state, "difficulty", "normal")
+                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
                         coins = max(0, coins)
                         if coins:
                             try:
@@ -148,6 +155,8 @@ class MiniGameScreen:
                             coins = int(result.get("coins", 0))
                         except (TypeError, ValueError):
                             coins = 0
+                        difficulty = getattr(self.state, "difficulty", "normal")
+                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
                         coins = max(0, coins)
                         if coins:
                             try:
