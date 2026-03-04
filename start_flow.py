@@ -109,6 +109,7 @@ class StartFlow:
         self._rebuild_layout()
         self.name_input: TextInput | None = None
         self.selected_difficulty = "normal"
+        self.selected_personality = "energetic"
 
     def _load_assets(self):
         path = os.path.join(self.assets_root, "ui", "start.png")
@@ -140,6 +141,13 @@ class StartFlow:
         self.btn_hard = Button(pygame.Rect(cx, y_diff + 2 * (btn_h + gap), btn_w, btn_h), "어려움", self.font_btn, enabled=True)
 
         self.diff_title_y = max(80, int(self.btn_easy.rect.y - 80))
+        
+        y_pers = int(H * 0.55)
+        self.btn_energetic = Button(pygame.Rect(cx, y_pers, btn_w, btn_h), "활발함", self.font_btn, enabled=True)
+        self.btn_calm = Button(pygame.Rect(cx, y_pers + (btn_h + gap), btn_w, btn_h), "차분함", self.font_btn, enabled=True)
+        self.btn_lazy = Button(pygame.Rect(cx, y_pers + 2 * (btn_h + gap), btn_w, btn_h), "냥냥함", self.font_btn, enabled=True)
+        
+        self.pers_title_y = max(80, int(self.btn_energetic.rect.y - 80))
         input_w, input_h = 340, 58
         self.name_rect = pygame.Rect(W // 2 - input_w // 2, int(H * 0.48), input_w, input_h)
 
@@ -149,6 +157,7 @@ class StartFlow:
         self.result = None
         self.name_input = None
         self.selected_difficulty = "normal"
+        self.selected_personality = "energetic"
         self._rebuild_layout()
 
     def handle_event(self, event: pygame.event.Event):
@@ -162,18 +171,33 @@ class StartFlow:
         elif self.mode == "DIFF":
             if self.btn_easy.handle_event(event):
                 self.selected_difficulty = "easy"
-                self.mode = "NAME"
-                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                self.mode = "PERSONALITY"
                 return
             if self.btn_normal.handle_event(event):
                 self.selected_difficulty = "normal"
-                self.mode = "NAME"
-                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                self.mode = "PERSONALITY"
                 return
             if self.btn_hard.handle_event(event):
                 self.selected_difficulty = "hard"
+                self.mode = "PERSONALITY"
+                return
+
+        elif self.mode == "PERSONALITY":
+            if self.btn_energetic.handle_event(event):
+                self.selected_personality = "energetic"
                 self.mode = "NAME"
                 self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                return
+            if self.btn_calm.handle_event(event):
+                self.selected_personality = "calm"
+                self.mode = "NAME"
+                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                return
+            if self.btn_lazy.handle_event(event):
+                self.selected_personality = "lazy"
+                self.mode = "NAME"
+                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                return
 
         elif self.mode == "NAME":
             assert self.name_input is not None
@@ -183,7 +207,7 @@ class StartFlow:
                 self._finish_if_valid()
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.mode = "DIFF"
+                self.mode = "PERSONALITY"
                 self.name_input = None
 
     def _finish_if_valid(self):
@@ -192,7 +216,11 @@ class StartFlow:
             return
 
         self.done = True
-        self.result = {"difficulty": self.selected_difficulty, "name": name}
+        self.result = {
+            "difficulty": self.selected_difficulty,
+            "personality": self.selected_personality,
+            "name": name
+        }
 
     def update(self, dt: float):
         if self.mode == "NAME" and self.name_input:
@@ -215,6 +243,12 @@ class StartFlow:
             self.btn_easy.draw(screen)
             self.btn_normal.draw(screen)
             self.btn_hard.draw(screen)
+
+        elif self.mode == "PERSONALITY":
+            self._draw_center_title("성격 선택")
+            self.btn_energetic.draw(screen)
+            self.btn_calm.draw(screen)
+            self.btn_lazy.draw(screen)
 
         elif self.mode == "NAME":
             title = self.font_name_title.render("고양이 이름을 지어주세요", True, (0, 0, 0))

@@ -135,7 +135,9 @@ class Game:
         self.state.day = max(1, int(data.get("day", 1)))
         self.state.time_phase = data.get("time_phase", state.MORNING)
         self.difficulty = state.normalize_difficulty(data.get("difficulty", "normal"))
+        self.personality = state.normalize_personality(data.get("personality", "energetic"))
         self.state.difficulty = self.difficulty
+        self.state.personality = self.personality
 
         cat_data = data.get("cat")
         if not isinstance(cat_data, dict):
@@ -146,7 +148,7 @@ class Game:
         if not isinstance(name, str) or not isinstance(stage, str):
             return
 
-        self.cat = Cat(name, stage, difficulty=self.difficulty)
+        self.cat = Cat(name, stage, difficulty=self.difficulty, personality=self.personality)
         try:
             self.cat.hunger = state.clamp(float(cat_data.get("hunger", 50)))
             self.cat.tiredness = state.clamp(float(cat_data.get("tiredness", 20)))
@@ -193,29 +195,32 @@ class Game:
                 self.flow.update(dt)
                 self.flow.draw()
                 if self.flow.done and self.flow.result:
-                    self.start_new_game(self.flow.result.get("name", ""), self.flow.result.get("difficulty", "normal"))
+                    self.start_new_game(
+                        self.flow.result.get("name", ""),
+                        self.flow.result.get("difficulty", "normal"),
+                        self.flow.result.get("personality", "energetic")
+                    )
                 pygame.display.flip()
                 continue
-
-            self.update(dt)
 
             self.draw()
 
         pygame.quit()
         sys.exit()
 
-    def start_new_game(self, name: str, difficulty: str = "normal"):
+    def start_new_game(self, name: str, difficulty: str = "normal", personality: str = "energetic"):
         name = str(name or "").strip()
         if not name:
             return
 
         self.difficulty = state.normalize_difficulty(difficulty)
+        self.personality = state.normalize_personality(personality)
 
-        self.state = state.GameState(self.difficulty)
+        self.state = state.GameState(self.difficulty, self.personality)
         if not hasattr(self.state, "minigame_used"):
             self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
 
-        self.cat = Cat(name, "아기고양이", difficulty=self.difficulty)
+        self.cat = Cat(name, "아기고양이", difficulty=self.difficulty, personality=self.personality)
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.panel_open = False
@@ -337,6 +342,7 @@ class Game:
             "day": max(1, int(self.state.day)),
             "time_phase": self.state.time_phase,
             "difficulty": state.normalize_difficulty(getattr(self.state, "difficulty", self.difficulty)),
+            "personality": state.normalize_personality(getattr(self.state, "personality", getattr(self, "personality", "energetic"))),
             "money": clean_money,
             "inventory": clean_inventory,
             "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False, "footsteps": False, "laser": False}),

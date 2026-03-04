@@ -7,6 +7,10 @@ DIFFICULTY_EASY = "easy"
 DIFFICULTY_NORMAL = "normal"
 DIFFICULTY_HARD = "hard"
 
+PERSONALITY_ENERGETIC = "energetic"
+PERSONALITY_CALM = "calm"
+PERSONALITY_LAZY = "lazy"
+
 DIFFICULTY_PROFILE = {
     DIFFICULTY_EASY: {
         "label": "쉬움",
@@ -37,11 +41,42 @@ DIFFICULTY_PROFILE = {
     },
 }
 
+PERSONALITY_PROFILE = {
+    PERSONALITY_ENERGETIC: {
+        "label": "활발함",
+        "description": "항상 밝고 행복해해!",
+        "happiness_recovery": 1.20,
+        "tiredness_increase": 1.15,
+        "coin_bonus": 1.10,
+    },
+    PERSONALITY_CALM: {
+        "label": "차분함",
+        "description": "천천히 생각하는 냥이",
+        "hunger_increase": 0.80,
+        "tiredness_recovery": 1.20,
+        "coin_bonus": 1.00,
+    },
+    PERSONALITY_LAZY: {
+        "label": "냥냥함",
+        "description": "쉬고 싶어하는 냥이",
+        "cleanliness_decrease": 0.80,
+        "tiredness_increase": 0.85,
+        "coin_bonus": 1.00,
+    },
+}
+
 
 def normalize_difficulty(difficulty: str | None) -> str:
     value = str(difficulty or DIFFICULTY_NORMAL).strip().lower()
     if value not in DIFFICULTY_PROFILE:
         return DIFFICULTY_NORMAL
+    return value
+
+
+def normalize_personality(personality: str | None) -> str:
+    value = str(personality or PERSONALITY_ENERGETIC).strip().lower()
+    if value not in PERSONALITY_PROFILE:
+        return PERSONALITY_ENERGETIC
     return value
 
 
@@ -53,9 +88,18 @@ def get_difficulty_label(difficulty: str | None) -> str:
     return get_difficulty_profile(difficulty)["label"]
 
 
+def get_personality_profile(personality: str | None) -> dict:
+    return PERSONALITY_PROFILE[normalize_personality(personality)]
+
+
+def get_personality_label(personality: str | None) -> str:
+    return get_personality_profile(personality)["label"]
+
+
 class GameState:
-    def __init__(self, difficulty: str = DIFFICULTY_NORMAL):
+    def __init__(self, difficulty: str = DIFFICULTY_NORMAL, personality: str = PERSONALITY_ENERGETIC):
         self.difficulty = normalize_difficulty(difficulty)
+        self.personality = normalize_personality(personality)
         self.day = 1
         self.time_phase = MORNING
         self.money = 0
@@ -75,7 +119,6 @@ MAX_STAT = 100
 def clamp(value):
     return max(0, min(value, MAX_STAT))
 
-def rand_range(rng):
 
     return random.randint(rng[0], rng[1])
 
