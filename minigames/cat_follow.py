@@ -55,11 +55,8 @@ class CatFollowGame:
 
     def _load_cat_source(self) -> pygame.Surface:
         primary = os.path.join(ASSET_DIR, "cat.png")
-        fallback_footsteps = asset_path("minigames", "footsteps", "cat.png")
         fallback_cat_run = asset_path("minigames", "cat_run", "cat.png")
         img = load_image(primary, alpha=True)
-        if img is None:
-            img = load_image(fallback_footsteps, alpha=True)
         if img is None:
             img = load_image(fallback_cat_run, alpha=True)
         if img is None:
@@ -122,142 +119,180 @@ class CatFollowGame:
             self._ensure_scaled_cat(tile)
 
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self._finish(False)
-                    self.running = False
+                if not self._handle_event(event, tile, gx, gy):
                     break
 
-                if self.phase == "RESULT":
-                    if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                        self.running = False
-                    continue
-
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self._finish(False)
-                    continue
-
-                if self.phase == "INPUT":
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                        cell = self._cell_at_pos(event.pos, tile, gx, gy)
-                        if cell is None:
-                            continue
-
-                        self.last_click = cell
-                        self.last_click_timer = 0.12
-
-                        if cell == self.sequence[self.input_index]:
-                            self.cats_correct += 1
-                            self.input_index += 1
-
-                            if self.input_index >= len(self.sequence):
-                                self.rounds_cleared += 1
-                                self.round_idx += 1
-
-                                if self.round_idx > self.target_round:
-                                    self._finish(True)
-                                else:
-                                    self.sequence = self._new_sequence(self.seq_len)
-                                    self.input_index = 0
-                                    self.phase = "SHOW"
-                                    self.show_timer = 0.0
-                                    self.show_step = 0
-                                    self.show_on = True
-                        else:
-                            self.fails += 1
-                            if self.fails >= self.max_fails:
-                                self._finish(False)
-                            else:
-                                self.phase = "SHOW"
-                                self.show_timer = 0.0
-                                self.show_step = 0
-                                self.show_on = True
-                                self.input_index = 0
-
-            if self.last_click_timer > 0:
-                self.last_click_timer -= dt
-                if self.last_click_timer <= 0:
-                    self.last_click = None
-
-            if self.phase == "SHOW":
-                self.show_timer += dt
-                dur = self.show_on_s if self.show_on else self.show_off_s
-                if self.show_timer >= dur:
-                    self.show_timer = 0.0
-                    if self.show_on:
-                        self.show_on = False
-                    else:
-                        self.show_on = True
-                        self.show_step += 1
-
-                if self.show_step >= len(self.sequence):
-                    self.phase = "INPUT"
-                    self.input_index = 0
-
-            if self.phase == "RESULT" and not self._result_once:
-                if self.won and self.ach:
-                    self.ach.on_event("minigame_won")
-                self._result_once = True
-
-            self.screen.fill((18, 18, 22))
-
-            title = self.font_big.render("고양이 따라가기", True, (255, 255, 255))
-            self.screen.blit(title, title.get_rect(center=(w // 2, int(h * 0.09) + ui_offset_y)))
-
-            hud = self.font.render(
-                f"ROUND {min(self.round_idx, self.target_round)}/{self.target_round}",
-                True,
-                (235, 235, 235),
-            )
-            self.screen.blit(hud, hud.get_rect(center=(w // 2, int(h * 0.14) + ui_offset_y)))
-
-            gap = 1
-            border_radius = max(6, tile // 6)
-
-            for r in range(self.grid):
-                for c in range(self.grid):
-                    rect = pygame.Rect(gx + c * tile, gy + r * tile, tile - gap, tile - gap)
-                    pygame.draw.rect(self.screen, (70, 70, 80), rect, border_radius=border_radius)
-
-                    if self.phase == "SHOW" and self.show_on and self.show_step < len(self.sequence):
-                        sr, sc = self.sequence[self.show_step]
-                        if (r, c) == (sr, sc):
-                            pygame.draw.rect(self.screen, (230, 230, 100), rect, border_radius=border_radius)
-                            cx = rect.centerx - self._cat_tile.get_width() // 2
-                            cy = rect.centery - self._cat_tile.get_height() // 2
-                            self.screen.blit(self._cat_tile, (cx, cy))
-
-                    if self.last_click == (r, c) and self._cat_tile is not None:
-                        cx = rect.centerx - self._cat_tile.get_width() // 2
-                        cy = rect.centery - self._cat_tile.get_height() // 2
-                        self.screen.blit(self._cat_tile, (cx, cy))
-                        pygame.draw.rect(self.screen, (120, 220, 140), rect, width=3, border_radius=border_radius)
-
-                    pygame.draw.rect(self.screen, (0, 0, 0), rect, width=2, border_radius=border_radius)
-
-            if self.phase == "INPUT":
-                prog = self.font.render(f"입력: {self.input_index}/{len(self.sequence)}", True, (255, 255, 255))
-                self.screen.blit(prog, prog.get_rect(center=(w // 2, min(int(h * 0.92), h - 24))))
-            elif self.phase == "SHOW":
-                prog = self.font.render("기억하세요...", True, (255, 255, 255))
-                self.screen.blit(prog, prog.get_rect(center=(w // 2, min(int(h * 0.92), h - 24))))
-
-            if self.phase == "RESULT":
-                overlay = pygame.Surface((w, h), pygame.SRCALPHA)
-                overlay.fill((0, 0, 0, 180))
-                self.screen.blit(overlay, (0, 0))
-
-                msg = "성공!" if self.won else "실패!"
-                m = self.font_big.render(msg, True, (255, 255, 255))
-                self.screen.blit(m, m.get_rect(center=(w // 2, int(h * 0.45))))
-
-                coins = self._coins_from(self.cats_correct, self.rounds_cleared)
-                sub = self.font.render(f"COINS +{coins}", True, (230, 230, 230))
-                self.screen.blit(sub, sub.get_rect(center=(w // 2, int(h * 0.56))))
-
-                hint = self.font.render("ENTER를 누르면 돌아갑니다", True, (210, 210, 210))
-                self.screen.blit(hint, hint.get_rect(center=(w // 2, int(h * 0.66))))
-
-            pygame.display.flip()
+            self._update(dt)
+            self._draw(w, h, tile, gx, gy, ui_offset_y)
 
         coins = self._coins_from(self.cats_correct, self.rounds_cleared)
         return {"won": bool(self.won), "score": 0, "coins": int(coins)}
+
+    def _handle_event(self, event, tile, gx, gy):
+        if event.type == pygame.QUIT:
+            self._finish(False)
+            self.running = False
+            return False
+
+        if self.phase == "RESULT":
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                self.running = False
+            return True
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self._finish(False)
+            return True
+
+        if self.phase == "INPUT" and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self._handle_input_click(event.pos, tile, gx, gy)
+        return True
+
+    def _handle_input_click(self, pos, tile, gx, gy):
+        cell = self._cell_at_pos(pos, tile, gx, gy)
+        if cell is None:
+            return
+
+        self.last_click = cell
+        self.last_click_timer = 0.12
+        if cell == self.sequence[self.input_index]:
+            self._handle_correct_input()
+        else:
+            self._handle_wrong_input()
+
+    def _handle_correct_input(self):
+        self.cats_correct += 1
+        self.input_index += 1
+        if self.input_index < len(self.sequence):
+            return
+
+        self.rounds_cleared += 1
+        self.round_idx += 1
+        if self.round_idx > self.target_round:
+            self._finish(True)
+        else:
+            self._restart_show_phase(regenerate_sequence=True)
+
+    def _handle_wrong_input(self):
+        self.fails += 1
+        if self.fails >= self.max_fails:
+            self._finish(False)
+        else:
+            self._restart_show_phase(regenerate_sequence=False)
+
+    def _restart_show_phase(self, *, regenerate_sequence: bool):
+        if regenerate_sequence:
+            self.sequence = self._new_sequence(self.seq_len)
+        self.input_index = 0
+        self.phase = "SHOW"
+        self.show_timer = 0.0
+        self.show_step = 0
+        self.show_on = True
+
+    def _update(self, dt):
+        self._update_last_click(dt)
+        self._update_show_phase(dt)
+        self._send_result_event_once()
+
+    def _update_last_click(self, dt):
+        if self.last_click_timer <= 0:
+            return
+        self.last_click_timer -= dt
+        if self.last_click_timer <= 0:
+            self.last_click = None
+
+    def _update_show_phase(self, dt):
+        if self.phase != "SHOW":
+            return
+
+        self.show_timer += dt
+        duration = self.show_on_s if self.show_on else self.show_off_s
+        if self.show_timer >= duration:
+            self.show_timer = 0.0
+            if self.show_on:
+                self.show_on = False
+            else:
+                self.show_on = True
+                self.show_step += 1
+
+        if self.show_step >= len(self.sequence):
+            self.phase = "INPUT"
+            self.input_index = 0
+
+    def _send_result_event_once(self):
+        if self.phase != "RESULT" or self._result_once:
+            return
+        if self.won and self.ach:
+            self.ach.on_event("minigame_won")
+        self._result_once = True
+
+    def _draw(self, w, h, tile, gx, gy, ui_offset_y):
+        self.screen.fill((18, 18, 22))
+        self._draw_header(w, h, ui_offset_y)
+        self._draw_grid(tile, gx, gy)
+        self._draw_phase_hint(w, h)
+        if self.phase == "RESULT":
+            self._draw_result_overlay(w, h)
+        pygame.display.flip()
+
+    def _draw_header(self, w, h, ui_offset_y):
+        title = self.font_big.render("고양이 따라가기", True, (255, 255, 255))
+        self.screen.blit(title, title.get_rect(center=(w // 2, int(h * 0.09) + ui_offset_y)))
+
+        hud = self.font.render(
+            f"ROUND {min(self.round_idx, self.target_round)}/{self.target_round}",
+            True,
+            (235, 235, 235),
+        )
+        self.screen.blit(hud, hud.get_rect(center=(w // 2, int(h * 0.14) + ui_offset_y)))
+
+    def _draw_grid(self, tile, gx, gy):
+        gap = 1
+        border_radius = max(6, tile // 6)
+        for row in range(self.grid):
+            for col in range(self.grid):
+                rect = pygame.Rect(gx + col * tile, gy + row * tile, tile - gap, tile - gap)
+                self._draw_cell(rect, row, col, border_radius)
+
+    def _draw_cell(self, rect, row, col, border_radius):
+        pygame.draw.rect(self.screen, (70, 70, 80), rect, border_radius=border_radius)
+        if self.phase == "SHOW" and self.show_on and self.show_step < len(self.sequence):
+            if (row, col) == self.sequence[self.show_step]:
+                pygame.draw.rect(self.screen, (230, 230, 100), rect, border_radius=border_radius)
+                self._draw_cat_tile(rect)
+
+        if self.last_click == (row, col) and self._cat_tile is not None:
+            self._draw_cat_tile(rect)
+            pygame.draw.rect(self.screen, (120, 220, 140), rect, width=3, border_radius=border_radius)
+
+        pygame.draw.rect(self.screen, (0, 0, 0), rect, width=2, border_radius=border_radius)
+
+    def _draw_cat_tile(self, rect):
+        cx = rect.centerx - self._cat_tile.get_width() // 2
+        cy = rect.centery - self._cat_tile.get_height() // 2
+        self.screen.blit(self._cat_tile, (cx, cy))
+
+    def _draw_phase_hint(self, w, h):
+        if self.phase == "INPUT":
+            text = f"입력: {self.input_index}/{len(self.sequence)}"
+        elif self.phase == "SHOW":
+            text = "기억하세요..."
+        else:
+            return
+        prog = self.font.render(text, True, (255, 255, 255))
+        self.screen.blit(prog, prog.get_rect(center=(w // 2, min(int(h * 0.92), h - 24))))
+
+    def _draw_result_overlay(self, w, h):
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        msg = "성공!" if self.won else "실패!"
+        m = self.font_big.render(msg, True, (255, 255, 255))
+        self.screen.blit(m, m.get_rect(center=(w // 2, int(h * 0.45))))
+
+        coins = self._coins_from(self.cats_correct, self.rounds_cleared)
+        sub = self.font.render(f"COINS +{coins}", True, (230, 230, 230))
+        self.screen.blit(sub, sub.get_rect(center=(w // 2, int(h * 0.56))))
+
+        hint = self.font.render("ENTER를 누르면 돌아갑니다", True, (210, 210, 210))
+        self.screen.blit(hint, hint.get_rect(center=(w // 2, int(h * 0.66))))

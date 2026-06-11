@@ -1,6 +1,8 @@
 import os
 import pygame
 
+from pg_utils import load_image, solid_surface
+
 
 def get_korean_font(size: int) -> pygame.font.Font:
     for name in ("malgungothic", "AppleGothic", "NanumGothic", "Noto Sans CJK KR"):
@@ -113,39 +115,44 @@ class StartFlow:
 
     def _load_assets(self):
         path = os.path.join(self.assets_root, "ui", "start.png")
-        self.start_bg = pygame.image.load(path).convert_alpha()
+        self.start_bg = load_image(path) or solid_surface(self.screen.get_size(), (30, 110, 55))
 
         bg_path = os.path.join(self.assets_root, "ui", "background.png")
-        self.name_bg = pygame.image.load(bg_path).convert_alpha()
+        self.name_bg = load_image(bg_path) or solid_surface(self.screen.get_size(), (245, 245, 245))
 
     def _rebuild_layout(self):
         W, H = self.screen.get_size()
+        self._rebuild_backgrounds(W, H)
+        self._rebuild_buttons(W, H)
 
-        bg = self.start_bg
-        bw, bh = bg.get_size()
+    def _rebuild_backgrounds(self, W, H):
+        bw, bh = self.start_bg.get_size()
         scale = max(W / bw, H / bh)
         new_size = (max(1, int(bw * scale)), max(1, int(bh * scale)))
-        self.start_bg_scaled = pygame.transform.smoothscale(bg, new_size)
+        self.start_bg_scaled = pygame.transform.smoothscale(self.start_bg, new_size)
         self.start_bg_pos = ((W - new_size[0]) // 2, (H - new_size[1]) // 2)
-
         self.name_bg_scaled = pygame.transform.smoothscale(self.name_bg, (W, H))
+
+    def _make_button(self, x, y, w, h, text):
+        return Button(pygame.Rect(x, y, w, h), text, self.font_btn, enabled=True)
+
+    def _rebuild_buttons(self, W, H):
         btn_w, btn_h = 200, 48
         cx = W // 2 - btn_w // 2
-        y_start = int(H * 0.80)
-
-        self.btn_start = Button(pygame.Rect(cx, y_start, btn_w, btn_h), "시작하기", self.font_btn)
-        y_diff = int(H * 0.62)
         gap = 10
-        self.btn_easy = Button(pygame.Rect(cx, y_diff, btn_w, btn_h), "쉬움", self.font_btn, enabled=True)
-        self.btn_normal = Button(pygame.Rect(cx, y_diff + (btn_h + gap), btn_w, btn_h), "보통", self.font_btn, enabled=True)
-        self.btn_hard = Button(pygame.Rect(cx, y_diff + 2 * (btn_h + gap), btn_w, btn_h), "어려움", self.font_btn, enabled=True)
+
+        self.btn_start = self._make_button(cx, int(H * 0.80), btn_w, btn_h, "시작하기")
+        y_diff = int(H * 0.62)
+        self.btn_easy = self._make_button(cx, y_diff, btn_w, btn_h, "쉬움")
+        self.btn_normal = self._make_button(cx, y_diff + (btn_h + gap), btn_w, btn_h, "보통")
+        self.btn_hard = self._make_button(cx, y_diff + 2 * (btn_h + gap), btn_w, btn_h, "어려움")
 
         self.diff_title_y = max(80, int(self.btn_easy.rect.y - 80))
         
         y_pers = int(H * 0.55)
-        self.btn_energetic = Button(pygame.Rect(cx, y_pers, btn_w, btn_h), "활발함", self.font_btn, enabled=True)
-        self.btn_calm = Button(pygame.Rect(cx, y_pers + (btn_h + gap), btn_w, btn_h), "차분함", self.font_btn, enabled=True)
-        self.btn_lazy = Button(pygame.Rect(cx, y_pers + 2 * (btn_h + gap), btn_w, btn_h), "냥냥함", self.font_btn, enabled=True)
+        self.btn_energetic = self._make_button(cx, y_pers, btn_w, btn_h, "활발함")
+        self.btn_calm = self._make_button(cx, y_pers + (btn_h + gap), btn_w, btn_h, "차분함")
+        self.btn_lazy = self._make_button(cx, y_pers + 2 * (btn_h + gap), btn_w, btn_h, "냥냥함")
         
         self.pers_title_y = max(80, int(self.btn_energetic.rect.y - 80))
         input_w, input_h = 340, 58
@@ -169,46 +176,48 @@ class StartFlow:
                 self.mode = "DIFF"
 
         elif self.mode == "DIFF":
-            if self.btn_easy.handle_event(event):
-                self.selected_difficulty = "easy"
-                self.mode = "PERSONALITY"
-                return
-            if self.btn_normal.handle_event(event):
-                self.selected_difficulty = "normal"
-                self.mode = "PERSONALITY"
-                return
-            if self.btn_hard.handle_event(event):
-                self.selected_difficulty = "hard"
-                self.mode = "PERSONALITY"
-                return
+            self._handle_difficulty_event(event)
 
         elif self.mode == "PERSONALITY":
-            if self.btn_energetic.handle_event(event):
-                self.selected_personality = "energetic"
-                self.mode = "NAME"
-                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
-                return
-            if self.btn_calm.handle_event(event):
-                self.selected_personality = "calm"
-                self.mode = "NAME"
-                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
-                return
-            if self.btn_lazy.handle_event(event):
-                self.selected_personality = "lazy"
-                self.mode = "NAME"
-                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
-                return
+            self._handle_personality_event(event)
 
         elif self.mode == "NAME":
-            assert self.name_input is not None
-            self.name_input.handle_event(event)
+            self._handle_name_event(event)
 
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                self._finish_if_valid()
-
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+    def _handle_difficulty_event(self, event):
+        for difficulty, button in (
+            ("easy", self.btn_easy),
+            ("normal", self.btn_normal),
+            ("hard", self.btn_hard),
+        ):
+            if button.handle_event(event):
+                self.selected_difficulty = difficulty
                 self.mode = "PERSONALITY"
-                self.name_input = None
+                return True
+        return False
+
+    def _handle_personality_event(self, event):
+        for personality, button in (
+            ("energetic", self.btn_energetic),
+            ("calm", self.btn_calm),
+            ("lazy", self.btn_lazy),
+        ):
+            if button.handle_event(event):
+                self.selected_personality = personality
+                self.mode = "NAME"
+                self.name_input = TextInput(self.name_rect, self.font_btn, max_len=12)
+                return True
+        return False
+
+    def _handle_name_event(self, event):
+        assert self.name_input is not None
+        self.name_input.handle_event(event)
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+            self._finish_if_valid()
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.mode = "PERSONALITY"
+            self.name_input = None
 
     def _finish_if_valid(self):
         name = (self.name_input.text if self.name_input else "").strip()
@@ -239,13 +248,13 @@ class StartFlow:
             self.btn_start.draw(screen)
 
         elif self.mode == "DIFF":
-            self._draw_center_title("난이도 선택")
+            self._draw_center_title("난이도 선택", self.diff_title_y)
             self.btn_easy.draw(screen)
             self.btn_normal.draw(screen)
             self.btn_hard.draw(screen)
 
         elif self.mode == "PERSONALITY":
-            self._draw_center_title("성격 선택")
+            self._draw_center_title("성격 선택", self.pers_title_y)
             self.btn_energetic.draw(screen)
             self.btn_calm.draw(screen)
             self.btn_lazy.draw(screen)
@@ -264,8 +273,7 @@ class StartFlow:
             back = self.font_small.render("ESC: 뒤로", True, (0, 0, 0))
             screen.blit(back, (20, H - 40))
 
-    def _draw_center_title(self, text: str):
+    def _draw_center_title(self, text: str, y: int):
         W, _ = self.screen.get_size()
         t = self.font_title.render(text, True, (255, 255, 255))
-        y = getattr(self, "diff_title_y", 120)
         self.screen.blit(t, t.get_rect(center=(W // 2, y)))

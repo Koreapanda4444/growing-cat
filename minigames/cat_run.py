@@ -1,13 +1,11 @@
 import pygame
 import random
 import sys
-import os
 
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import load_font, load_image, solid_surface
 
-ASSET_DIR = asset_path("minigames", "cat_run")
-FONT_PATH = asset_path("minigames", "cat_run", "fonts", "ThinDungGeunMo.ttf")
+FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 WIDTH, HEIGHT = 400, 600
 FPS = 60
@@ -23,43 +21,59 @@ class CatRunGame:
         self.running = True
 
         self.font = load_font(FONT_PATH, 18)
+        self._load_assets()
+        self._init_world()
+        self._init_player()
+        self._init_obstacles()
 
-        try:
-            self.bg = pygame.image.load(os.path.join(ASSET_DIR, "grass.png")).convert()
-            self.bg = pygame.transform.scale(self.bg, (WIDTH, HEIGHT))
-        except:
-            self.bg = pygame.Surface((WIDTH, HEIGHT))
-            self.bg.fill((100, 150, 100))
+        self.distance = 0.0
+        self.score = 0
 
-        try:
-            self.cat_img = pygame.image.load(os.path.join(ASSET_DIR, "cat.png")).convert_alpha()
-            self.cat_img = pygame.transform.scale(self.cat_img, (48, 48))
-        except:
-            self.cat_img = pygame.Surface((48, 48))
-            self.cat_img.fill((255, 200, 100))
+    def _load_assets(self):
+        self.bg = load_image(
+            asset_path("minigames", "cat_run", "grass.png"),
+            size=(WIDTH, HEIGHT),
+            smooth=False,
+            alpha=False,
+        ) or solid_surface((WIDTH, HEIGHT), (100, 150, 100))
 
-        self.obstacle_imgs = []
-        try:
-            obs_lemon = pygame.image.load(os.path.join(ASSET_DIR, "lemon.png")).convert_alpha()
-            obs_orange = pygame.image.load(os.path.join(ASSET_DIR, "orange.png")).convert_alpha()
-            obs_water = pygame.image.load(os.path.join(ASSET_DIR, "water.png")).convert_alpha()
-            small_orange = pygame.transform.scale(obs_orange, (25, 25))
-            medium_lemon = pygame.transform.scale(obs_lemon, (40, 35))
-            large_water = pygame.transform.scale(obs_water, (60, 30))
-            self.obstacle_imgs = [small_orange, medium_lemon, large_water]
-        except:
-            small_orange = pygame.Surface((25, 25))
-            small_orange.fill((255, 150, 0))
-            medium_lemon = pygame.Surface((40, 35))
-            medium_lemon.fill((255, 200, 0))
-            large_water = pygame.Surface((60, 30))
-            large_water.fill((0, 150, 255))
-            self.obstacle_imgs = [small_orange, medium_lemon, large_water]
+        self.cat_img = load_image(
+            asset_path("minigames", "cat_run", "cat.png"),
+            size=(48, 48),
+            smooth=False,
+            alpha=True,
+        ) or solid_surface((48, 48), (255, 200, 100), alpha=True)
 
+        self.obstacle_imgs = [
+            load_image(
+                asset_path("minigames", "cat_run", "orange.png"),
+                size=(25, 25),
+                smooth=False,
+                alpha=True,
+            )
+            or solid_surface((25, 25), (255, 150, 0), alpha=True),
+            load_image(
+                asset_path("minigames", "cat_run", "lemon.png"),
+                size=(40, 35),
+                smooth=False,
+                alpha=True,
+            )
+            or solid_surface((40, 35), (255, 200, 0), alpha=True),
+            load_image(
+                asset_path("minigames", "cat_run", "water.png"),
+                size=(60, 30),
+                smooth=False,
+                alpha=True,
+            )
+            or solid_surface((60, 30), (0, 150, 255), alpha=True),
+        ]
+
+    def _init_world(self):
         self.bg_x1 = 0
         self.bg_x2 = WIDTH
         self.bg_speed = 2
 
+    def _init_player(self):
         self.cat_x = 60
         self.cat_y = GROUND_Y
         self.cat_vel_y = 0
@@ -68,6 +82,8 @@ class CatRunGame:
         self.on_ground = True
         self.jump_count = 0
         self.max_jumps = 2
+
+    def _init_obstacles(self):
         self.obstacles = []
         self.base_obstacle_speed = 4.0
         self.obstacle_speed = self.base_obstacle_speed
@@ -77,9 +93,6 @@ class CatRunGame:
         self.max_spawn_meters = 40
         self.pixels_per_meter = 10
         self.next_spawn_frames = self._compute_next_spawn_frames()
-
-        self.distance = 0.0
-        self.score = 0
 
     def update_difficulty(self):
         difficulty_level = int(self.distance) // 100
@@ -108,6 +121,7 @@ class CatRunGame:
             self.bg_x2 = WIDTH
 
         self.distance += self.obstacle_speed / self.pixels_per_meter
+        self.update_difficulty()
 
         self.cat_vel_y += self.gravity
         self.cat_y += self.cat_vel_y
@@ -130,8 +144,6 @@ class CatRunGame:
             if obs[1].right < 0:
                 self.obstacles.remove(obs)
                 self.score += 1
-
-            self.update_difficulty()
 
             if cat_rect.colliderect(obs[1]):
                 self.running = False

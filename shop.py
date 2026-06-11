@@ -2,10 +2,8 @@ import pygame
 import state as game_state
 
 from config import asset_path
-from pg_utils import load_font
-
-WIDTH = 400
-HEIGHT = 600
+from items import get_shop_categories
+from pg_utils import load_font, load_image
 
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
@@ -32,22 +30,7 @@ class ShopUI:
         self.tab_evolution = pygame.Rect(270, 90, 100, 32)
         self.active_tab = "FOOD"
 
-        self.items = {
-            "FOOD": [
-                {"name": "밥", "price": 25, "id": "bab", "image": asset_path("foods", "bab.png")},
-                {"name": "생선", "price": 45, "id": "fish", "image": asset_path("foods", "fish.png")},
-                {"name": "츄르", "price": 70, "id": "chur", "image": asset_path("foods", "chur.png")},
-            ],
-            "TOY": [
-                {"name": "강아지풀", "price": 25, "id": "doggrass", "image": asset_path("toys", "doggrass.png")},
-                {"name": "낚싯대", "price": 65, "id": "fishing", "image": asset_path("toys", "fishing.png")},
-                {"name": "실", "price": 45, "id": "string", "image": asset_path("toys", "string.png")},
-            ],
-            "EVOLUTION": [
-                {"name": "고기", "price": 120, "id": "meat", "image": asset_path("evolution", "meat.png")},
-                {"name": "뼈", "price": 260, "id": "bone", "image": asset_path("evolution", "bone.png")},
-            ]
-        }
+        self.items = get_shop_categories()
         self._apply_difficulty_prices()
 
         self.item_rects = []
@@ -148,12 +131,9 @@ class ShopUI:
             pygame.draw.rect(self.screen, (220, 220, 220), icon_rect)
             pygame.draw.rect(self.screen, BORDER, icon_rect, 2)
 
-            try:
-                img = pygame.image.load(item["image"]).convert_alpha()
-                img = pygame.transform.scale(img, (size - 4, size - 4))
+            img = load_image(item["image"], size=(size - 4, size - 4), smooth=False)
+            if img:
                 self.screen.blit(img, (x + 2, y + 2))
-            except:
-                pass
 
             name = self.font.render(item["name"], True, (0, 0, 0))
             self.screen.blit(name, (x + 4, y + size + 4))

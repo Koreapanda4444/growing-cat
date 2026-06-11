@@ -9,6 +9,7 @@ from bag import BagUI
 import save
 import evolution
 from config import asset_path, base_path
+from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import load_font, load_image, load_sound, play_music
 from achievements import AchievementsManager, draw_toasts
 from achievements_ui import AchievementsUI
@@ -36,7 +37,6 @@ BAR_WIDTH = 155
 BOTTOM_BTN_Y = 540
 BOTTOM_BTN_W = 100
 BOTTOM_BTN_H = 36
-BOTTOM_GAP = 20
 
 PANEL_W = 110
 PANEL_BTN_H = 26
@@ -49,20 +49,55 @@ LEFT_ARROW_RECT = pygame.Rect(10, 300, 24, 44)
 MAIN_CAT_Y = 450
 NAME_Y_OFFSET = 1
 
+CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
+CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
+MENU_ACTION_LABELS = ("설정", "미니게임", "상점", "가방", "업적")
+
+
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_stat(value, default=0):
+    try:
+        return state.clamp(float(value))
+    except (TypeError, ValueError):
+        return state.clamp(float(default))
+
 
 class Game:
     def __init__(self):
+        self._init_pygame()
+        self._init_runtime_flags()
+        self._init_start_flow()
+        self._load_assets()
+        self._init_fonts()
+        self.pause_menu = PauseMenu(self.screen)
+        self.state = state.GameState()
+        self.ach = self._init_achievements()
+        self._init_game_defaults()
+        self.load_saved_game()
+        self.app_mode = "GAME" if self.cat else "START_FLOW"
+
+    def _init_pygame(self):
         pygame.init()
-        pygame.mixer.init()
+        try:
+            pygame.mixer.init()
+        except pygame.error:
+            pass
         pygame.display.set_caption("고양이 키우기")
         pygame.key.start_text_input()
 
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-
         icon_surface = load_image(asset_path("icon", "icon.png"), alpha=True)
         if icon_surface is not None:
             pygame.display.set_icon(icon_surface)
         self.clock = pygame.time.Clock()
+
+    def _init_runtime_flags(self):
         self.running = True
 
         self.paused = False
@@ -73,20 +108,23 @@ class Game:
         self.toast_text = ""
         self.toast_timer = 0.0
 
-        self.app_mode = "START_FLOW"
         self.difficulty = "normal"
+
+    def _init_start_flow(self):
+        self.app_mode = "START_FLOW"
         self.flow = StartFlow(self.screen, assets_root=os.path.join(base_path(), "assets"))
 
+    def _load_assets(self):
         self.back_image = self.load_image(BACK_IMAGE)
         self.back_image = pygame.transform.scale(self.back_image, (WIDTH, HEIGHT))
         self.back_rect = self.back_image.get_rect(topleft=(0, 0))
 
         self.coin_image = load_image(asset_path("ui", "coin.png"), size=(36, 36), smooth=True, alpha=True)
-
         self.click_sound = load_sound(asset_path("sounds", "button.mp3"), volume=0.25)
 
         play_music(asset_path("sounds", "bgm.mp3"), volume=1, loops=-1)
 
+    def _init_fonts(self):
         pygame.font.init()
         self.font = load_font(FONT_PATH, 18)
         self.name_font = load_font(FONT_PATH, 18)
@@ -97,43 +135,39 @@ class Game:
         self.hint_font = load_font(FONT_PATH, 16)
         self.coin_font = load_font(FONT_PATH, 20)
 
-        self.pause_menu = PauseMenu(self.screen)
-
-        self.state = state.GameState()
-
+    def _init_achievements(self):
         try:
             base = Path(os.getenv("APPDATA") or str(Path.home())) / "growing-cat"
             base.mkdir(parents=True, exist_ok=True)
-            self.ach = AchievementsManager(str(base / "achievements_save.json"))
-        except Exception:
-            self.ach = AchievementsManager()
+            return AchievementsManager(str(base / "achievements_save.json"))
+        except OSError:
+            return AchievementsManager()
 
+    def _init_game_defaults(self):
         self.cat = None
         self.panel_open = False
         self.left_panel_open = False
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
+        self.scene = "MAIN"
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self._cat_image_path = None
+        self._cat_image = None
         if not hasattr(self.state, "minigame_used"):
-            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
+            self.state.minigame_used = state.new_minigame_usage()
         self.evolve_timer = 0
 
         self.evolve_menu_timer = 0
-
-        self.load_saved_game()
-        if self.cat:
-            self.app_mode = "GAME"
-        else:
-            self.app_mode = "START_FLOW"
 
     def load_saved_game(self):
         data = save.load_game()
         if not isinstance(data, dict) or "cat" not in data:
             return
 
-        self.state.day = max(1, int(data.get("day", 1)))
-        self.state.time_phase = data.get("time_phase", state.MORNING)
+        self.state.day = max(1, safe_int(data.get("day", 1), 1))
+        saved_phase = data.get("time_phase", state.MORNING)
+        self.state.time_phase = saved_phase if saved_phase in (state.MORNING, state.NIGHT) else state.MORNING
         self.difficulty = state.normalize_difficulty(data.get("difficulty", "normal"))
         self.personality = state.normalize_personality(data.get("personality", "energetic"))
         self.state.difficulty = self.difficulty
@@ -157,23 +191,21 @@ class Game:
         except (TypeError, ValueError):
             pass
 
-        self.state.money = max(0, int(data.get("money", 0)))
-        raw_inv = data.get("inventory", {})
-        if isinstance(raw_inv, dict):
-            self.inventory = {k: max(0, int(v)) for k, v in raw_inv.items() if isinstance(k, str)}
-        else:
-            self.inventory = {}
-        self.state.minigame_used = data.get("minigame_used", {"jump": False, "memory": False, "footsteps": False})
-        if isinstance(self.state.minigame_used, dict) and "laser" not in self.state.minigame_used:
-            self.state.minigame_used["laser"] = False
+        self.state.money = max(0, safe_int(data.get("money", 0), 0))
+        self.inventory = normalize_inventory(data.get("inventory", {}))
+        self.state.minigame_used = state.normalize_minigame_usage(data.get("minigame_used"))
         self.scene = "MAIN"
 
     def load_image(self, filename):
-        try:
-            return pygame.image.load(filename).convert_alpha()
-        except:
+        image = load_image(filename, alpha=True)
+        if image is None:
             pygame.quit()
             sys.exit()
+        return image
+
+    def _save_if_game_active(self):
+        if self.app_mode == "GAME" and self.scene == "MAIN" and self.cat:
+            save.save_game(self.make_save_data())
 
     def run(self):
         while self.running:
@@ -182,10 +214,12 @@ class Game:
             self.handle_events(events)
 
             if self.request_quit:
+                self._save_if_game_active()
                 self.running = False
                 continue
 
             if self.request_to_start:
+                self._save_if_game_active()
                 self.request_to_start = False
                 self.paused = False
                 self.restart_game()
@@ -203,6 +237,7 @@ class Game:
                 pygame.display.flip()
                 continue
 
+            self.update(dt)
             self.draw()
 
         pygame.quit()
@@ -218,7 +253,7 @@ class Game:
 
         self.state = state.GameState(self.difficulty, self.personality)
         if not hasattr(self.state, "minigame_used"):
-            self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
+            self.state.minigame_used = state.new_minigame_usage()
 
         self.cat = Cat(name, "아기고양이", difficulty=self.difficulty, personality=self.personality)
         self.inventory = {}
@@ -238,68 +273,97 @@ class Game:
             self.cat.on_night()
         else:
             self.cat.on_morning()
-            day_reward = state.get_day_coin_reward(self.difficulty)
-            self.state.money = max(0, int(self.state.money + day_reward))
-
-            if self.ach:
-                self.ach.on_event("day_end")
-                self.ach.on_event("coins_earned", amount=day_reward)
-                try:
-                    stats = {
-                        "happiness": int(self.cat.happiness),
-                        "cleanliness": int(self.cat.cleanliness),
-                        "hunger": int(self.cat.hunger),
-                        "fatigue": int(self.cat.tiredness),
-                    }
-                    self.ach.check_stats_on_day_end(stats)
-                except Exception:
-                    pass
+            self._grant_day_reward()
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
-        self.state.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
+        self.state.minigame_used = state.new_minigame_usage()
 
-        evolved = False
-        while True:
-            has_meat = self.inventory.get("고기", 0) > 0
-            has_bone = self.inventory.get("뼈", 0) > 0
-            base_cost = evolution.EVOLUTION_COST.get(self.cat.stage, 0)
-            evo_cost = state.get_evolution_cost(base_cost, self.difficulty)
-            can_evo, msg = evolution.can_evolve(self.cat, self.state.day, self.state.money, has_meat, has_bone, cost_override=evo_cost)
-            if phase == state.MORNING and can_evo:
-                cost = evo_cost
-                if self.state.money >= cost:
-                    if self.cat.stage == evolution.ADULT:
-                        if self.inventory.get("고기", 0) <= 0:
-                            break
-                        self.inventory["고기"] -= 1
-                    elif self.cat.stage == evolution.LION:
-                        if self.inventory.get("뼈", 0) <= 0:
-                            break
-                        self.inventory["뼈"] -= 1
-
-                    self.state.money -= cost
-                    evolution.evolve(self.cat)
-                    evolved = True
-
-                    if self.ach:
-                        stage_map = {
-                            evolution.ADULT: "adult",
-                            evolution.LION: "lion",
-                            evolution.DINO: "dino",
-                        }
-                        self.ach.on_event("evolved", stage=stage_map.get(self.cat.stage, ""))
-                else:
-                    break
-            else:
-                break
-
+        evolved = phase == state.MORNING and self._try_auto_evolve()
         if evolved:
             self.scene = "EVOLVE"
             self.evolve_timer = 0
 
         self.check_game_over()
         save.save_game(self.make_save_data())
-        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+
+    def _grant_day_reward(self):
+        day_reward = state.get_day_coin_reward(self.difficulty)
+        self.state.money = max(0, int(self.state.money + day_reward))
+
+        if not self.ach:
+            return
+
+        self.ach.on_event("day_end")
+        self.ach.on_event("coins_earned", amount=day_reward)
+        try:
+            stats = {
+                "happiness": int(self.cat.happiness),
+                "cleanliness": int(self.cat.cleanliness),
+                "hunger": int(self.cat.hunger),
+                "fatigue": int(self.cat.tiredness),
+            }
+        except (TypeError, ValueError):
+            return
+        self.ach.check_stats_on_day_end(stats)
+
+    def _current_evolution_cost(self, stage=None):
+        base_cost = evolution.EVOLUTION_COST.get(stage or self.cat.stage, 0)
+        return state.get_evolution_cost(base_cost, self.difficulty)
+
+    def _can_evolve_now(self, cost):
+        has_meat = self.inventory.get("고기", 0) > 0
+        has_bone = self.inventory.get("뼈", 0) > 0
+        can_evo, _ = evolution.can_evolve(
+            self.cat,
+            self.state.day,
+            self.state.money,
+            has_meat,
+            has_bone,
+            cost_override=cost,
+        )
+        return can_evo
+
+    def _consume_required_evolution_item(self, stage):
+        required_item = None
+        if stage == evolution.ADULT:
+            required_item = "고기"
+        elif stage == evolution.LION:
+            required_item = "뼈"
+
+        if required_item is None:
+            return True
+        if self.inventory.get(required_item, 0) <= 0:
+            return False
+        self.inventory[required_item] -= 1
+        return True
+
+    def _notify_evolved(self):
+        if not self.ach:
+            return
+
+        stage_map = {
+            evolution.ADULT: "adult",
+            evolution.LION: "lion",
+            evolution.DINO: "dino",
+        }
+        self.ach.on_event("evolved", stage=stage_map.get(self.cat.stage, ""))
+
+    def _try_auto_evolve(self):
+        evolved = False
+        while True:
+            stage = self.cat.stage
+            cost = self._current_evolution_cost(stage)
+            if not self._can_evolve_now(cost) or self.state.money < cost:
+                break
+            if not self._consume_required_evolution_item(stage):
+                break
+
+            self.state.money -= cost
+            evolution.evolve(self.cat)
+            self._notify_evolved()
+            evolved = True
+
+        return evolved
 
     def check_game_over(self):
         result = self.cat.check_game_over()
@@ -324,54 +388,65 @@ class Game:
         self.ending_log = {}
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self._cat_image_path = None
+        self._cat_image = None
         self.flow.reset_to_start()
         self.app_mode = "START_FLOW"
 
     def make_save_data(self):
         try:
-            clean_inventory = {k: max(0, int(v)) for k, v in self.inventory.items() if isinstance(k, str) and isinstance(v, (int, float))}
+            clean_inventory = normalize_inventory(self.inventory)
         except (TypeError, ValueError):
             clean_inventory = {}
-        
-        try:
-            clean_money = max(0, int(self.state.money))
-        except (TypeError, ValueError):
-            clean_money = 0
-        
+
+        clean_money = max(0, safe_int(getattr(self.state, "money", 0), 0))
+        clean_day = max(1, safe_int(getattr(self.state, "day", 1), 1))
+        clean_phase = getattr(self.state, "time_phase", state.MORNING)
+        if clean_phase not in (state.MORNING, state.NIGHT):
+            clean_phase = state.MORNING
+        cat_stats = {
+            "hunger": safe_stat(getattr(self.cat, "hunger", 50), 50),
+            "tiredness": safe_stat(getattr(self.cat, "tiredness", 20), 20),
+            "happiness": safe_stat(getattr(self.cat, "happiness", 70), 70),
+            "cleanliness": safe_stat(getattr(self.cat, "cleanliness", 60), 60),
+        }
+
         return {
-            "day": max(1, int(self.state.day)),
-            "time_phase": self.state.time_phase,
+            "day": clean_day,
+            "time_phase": clean_phase,
             "difficulty": state.normalize_difficulty(getattr(self.state, "difficulty", self.difficulty)),
-            "personality": state.normalize_personality(getattr(self.state, "personality", getattr(self, "personality", "energetic"))),
+            "personality": state.normalize_personality(
+                getattr(self.state, "personality", getattr(self, "personality", "energetic"))
+            ),
             "money": clean_money,
             "inventory": clean_inventory,
-            "minigame_used": getattr(self.state, "minigame_used", {"jump": False, "memory": False, "footsteps": False, "laser": False}),
+            "minigame_used": state.normalize_minigame_usage(getattr(self.state, "minigame_used", None)),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
-                "hunger": state.clamp(float(self.cat.hunger)),
-                "tiredness": state.clamp(float(self.cat.tiredness)),
-                "happiness": state.clamp(float(self.cat.happiness)),
-                "cleanliness": state.clamp(float(self.cat.cleanliness))
+                **cat_stats,
             }
         }
 
-    def spend_money(self, amount):
-        if self.state.money >= amount:
-            self.state.money -= amount
-            return True
-        return False
-
     def play_click_sound(self):
         if self.click_sound:
-            self.click_sound.play()
+            try:
+                self.click_sound.play()
+            except pygame.error:
+                pass
 
     def open_settings(self):
         from settings import SettingsScreen
         SettingsScreen(self.screen, self.restart_game).run()
 
     def open_shop(self):
-        shop = ShopUI(self.screen, self.state.money, self.on_buy_item, self.play_click_sound, difficulty=self.difficulty)
+        shop = ShopUI(
+            self.screen,
+            self.state.money,
+            self.on_buy_item,
+            self.play_click_sound,
+            difficulty=self.difficulty,
+        )
         shop.run()
         save.save_game(self.make_save_data())
 
@@ -400,54 +475,51 @@ class Game:
         stage = getattr(self.cat, "stage", None)
         next_stage = evolution.get_next_stage(stage)
 
-        has_meat = self.inventory.get("고기", 0) > 0
-        has_bone = self.inventory.get("뼈", 0) > 0
-        base_cost = evolution.EVOLUTION_COST.get(stage, 0)
-        cost = state.get_evolution_cost(base_cost, self.difficulty)
+        cost = self._current_evolution_cost(stage)
         can_evo, status_msg = evolution.can_evolve(
             self.cat,
             self.state.day,
             self.state.money,
-            has_meat,
-            has_bone,
+            self.inventory.get("고기", 0) > 0,
+            self.inventory.get("뼈", 0) > 0,
             cost_override=cost,
         )
 
-        lines = []
         if not next_stage:
-            lines.append("현재: 최종 단계")
-            lines.append("더 이상 진화할 수 없습니다")
             return {
                 "next_stage": None,
                 "can_evolve": False,
                 "status": status_msg,
-                "lines": lines,
+                "lines": ["현재: 최종 단계", "더 이상 진화할 수 없습니다"],
             }
 
-        lines.append(f"현재: {stage} → 다음: {next_stage}")
-        lines.append(f"비용: {cost} 코인")
-
-        if stage == evolution.BABY:
-            lines.append("조건: 7일 이상")
-        elif stage == evolution.ADULT:
-            lines.append("조건: 21일 이상")
-            lines.append(f"아이템: 고기 1개 (보유: {self.inventory.get('고기', 0)})")
-            lines.append("스탯: 행복 75↑, 피로 25↓, 청결 75↑, 배고픔 25↓")
-        elif stage == evolution.LION:
-            lines.append("조건: 35일 이상")
-            lines.append(f"아이템: 뼈 1개 (보유: {self.inventory.get('뼈', 0)})")
-            lines.append("스탯: 행복 80↑, 피로 15↓, 청결 80↑, 배고픔 15↓")
-        else:
-            lines.append("조건: -")
-
+        lines = [f"현재: {stage} → 다음: {next_stage}", f"비용: {cost} 코인"]
+        lines.extend(self._evolution_requirement_lines(stage))
         lines.append(f"상태: {'진화 가능' if can_evo else status_msg}")
-
         return {
             "next_stage": next_stage,
             "can_evolve": can_evo,
             "status": status_msg,
             "lines": lines,
         }
+
+    def _evolution_requirement_lines(self, stage):
+        if stage == evolution.BABY:
+            return ["조건: 7일 이상"]
+        if stage == evolution.ADULT:
+            return [
+                "조건: 21일 이상",
+                f"아이템: 고기 1개 (보유: {self.inventory.get('고기', 0)})",
+                "스탯: 행복 75↑, 피로 25↓, 청결 75↑, 배고픔 25↓",
+            ]
+        if stage == evolution.LION:
+            return [
+                "조건: 35일 이상",
+                f"아이템: 뼈 1개 (보유: {self.inventory.get('뼈', 0)})",
+                "스탯: 행복 80↑, 피로 15↓, 청결 80↑, 배고픔 15↓",
+            ]
+        return ["조건: -"]
+
 
     def try_evolve_now(self):
         info = self.get_evolve_menu_info()
@@ -456,30 +528,16 @@ class Game:
             return False
 
         stage = self.cat.stage
-        base_cost = evolution.EVOLUTION_COST.get(stage, 0)
-        cost = state.get_evolution_cost(base_cost, self.difficulty)
+        cost = self._current_evolution_cost(stage)
         if self.state.money < cost:
             return False
 
-        if stage == evolution.ADULT:
-            if self.inventory.get("고기", 0) <= 0:
-                return False
-            self.inventory["고기"] -= 1
-        elif stage == evolution.LION:
-            if self.inventory.get("뼈", 0) <= 0:
-                return False
-            self.inventory["뼈"] -= 1
+        if not self._consume_required_evolution_item(stage):
+            return False
 
         self.state.money -= cost
         self.cat.evolve_to(next_stage)
-
-        if self.ach:
-            stage_map = {
-                evolution.ADULT: "adult",
-                evolution.LION: "lion",
-                evolution.DINO: "dino",
-            }
-            self.ach.on_event("evolved", stage=stage_map.get(self.cat.stage, ""))
+        self._notify_evolved()
 
         self.scene = "EVOLVE"
         self.evolve_timer = 0
@@ -487,28 +545,30 @@ class Game:
         return True
 
     def use_item(self, item):
+        item = normalize_inventory_item(item)
         if not self.cat or item not in self.inventory or self.inventory[item] <= 0:
             return
-        
+
+        used = True
         if item == "사료":
             self.cat.hunger = max(0, self.cat.hunger - 30)
-            self.inventory["사료"] -= 1
         elif item == "생선":
             self.cat.hunger = max(0, self.cat.hunger - 50)
-            self.inventory["생선"] -= 1
         elif item == "츄르":
             self.cat.hunger = max(0, self.cat.hunger - 70)
-            self.inventory["츄르"] -= 1
         elif item == "강아지풀":
             self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 20)
-            self.inventory["강아지풀"] -= 1
         elif item == "실":
             self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 30)
-            self.inventory["실"] -= 1
         elif item == "낚싯대":
             self.cat.happiness = min(state.MAX_STAT, self.cat.happiness + 50)
-            self.inventory["낚싯대"] -= 1
-        
+        else:
+            used = False
+
+        if not used:
+            return
+
+        self.inventory[item] -= 1
         self.cat._clamp_all()
         save.save_game(self.make_save_data())
 
@@ -527,6 +587,10 @@ class Game:
         if price < 0:
             return False
 
+        inventory_item = inventory_item_from_shop_id(item_id)
+        if inventory_item is None:
+            return False
+
         try:
             self.state.money = max(0, int(self.state.money))
         except (TypeError, ValueError):
@@ -536,33 +600,36 @@ class Game:
             return False
         self.state.money -= price
 
+        self.inventory[inventory_item] = self.inventory.get(inventory_item, 0) + 1
+
         if self.ach:
             self.ach.on_event("item_bought")
-        
-        if item_id == "bab":
-            self.inventory["사료"] = self.inventory.get("사료", 0) + 1
-        elif item_id == "fish":
-            self.inventory["생선"] = self.inventory.get("생선", 0) + 1
-        elif item_id == "chur":
-            self.inventory["츄르"] = self.inventory.get("츄르", 0) + 1
-        elif item_id == "meat":
-            self.inventory["고기"] = self.inventory.get("고기", 0) + 1
-        elif item_id == "doggrass":
-            self.inventory["강아지풀"] = self.inventory.get("강아지풀", 0) + 1
-        elif item_id == "fishing":
-            self.inventory["낚싯대"] = self.inventory.get("낚싯대", 0) + 1
-        elif item_id == "string":
-            self.inventory["실"] = self.inventory.get("실", 0) + 1
-        elif item_id == "bone":
-            self.inventory["뼈"] = self.inventory.get("뼈", 0) + 1
         
         save.save_game(self.make_save_data())
         return True
 
-    def handle_click_main(self, pos):
+    def _advance_rect(self):
         center_x = (WIDTH - BOTTOM_BTN_W) // 2
-        advance_rect = pygame.Rect(center_x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
-        if advance_rect.collidepoint(pos):
+        return pygame.Rect(center_x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
+
+    def _panel_close_rect(self, panel_x):
+        return pygame.Rect(
+            panel_x,
+            PANEL_Y - (PANEL_BTN_H + PANEL_GAP),
+            PANEL_W,
+            PANEL_BTN_H,
+        )
+
+    def _panel_button_rect(self, panel_x, index):
+        return pygame.Rect(
+            panel_x,
+            PANEL_Y + index * (PANEL_BTN_H + PANEL_GAP),
+            PANEL_W,
+            PANEL_BTN_H,
+        )
+
+    def handle_click_main(self, pos):
+        if self._advance_rect().collidepoint(pos):
             self.play_click_sound()
             self.advance_time()
             return
@@ -577,128 +644,135 @@ class Game:
             self.left_panel_open = True
             return
 
-        if self.panel_open:
-            panel_x = WIDTH - PANEL_W - 8
+        if self.panel_open and self._handle_care_panel_click(pos):
+            return
 
-            close_rect = pygame.Rect(
-                panel_x,
-                PANEL_Y - (PANEL_BTN_H + PANEL_GAP),
-                PANEL_W,
-                PANEL_BTN_H
-            )
-            if close_rect.collidepoint(pos):
+        if self.left_panel_open and self._handle_menu_panel_click(pos):
+            return
+
+    def _handle_care_panel_click(self, pos):
+        panel_x = WIDTH - PANEL_W - 8
+        if self._panel_close_rect(panel_x).collidepoint(pos):
+            self.play_click_sound()
+            self.panel_open = False
+            return True
+
+        actions = ("feed_free", "play_free", "clean", "sleep")
+        for index, key in enumerate(CARE_ACTION_KEYS):
+            if self._panel_button_rect(panel_x, index).collidepoint(pos):
                 self.play_click_sound()
-                self.panel_open = False
-                return
+                if self.actions_used[key]:
+                    return True
+                if self.cat:
+                    getattr(self.cat, actions[index])()
+                    self.actions_used[key] = True
+                    save.save_game(self.make_save_data())
+                    self.check_game_over()
+                return True
 
-            labels = ["밥", "놀기", "씻기", "잠자기", "진화"]
-            actions = [self.cat.feed_free, self.cat.play_free, self.cat.clean, self.cat.sleep, self.open_evolve_menu]
-            keys = ["feed", "play", "clean", "sleep"]
+        evolve_index = len(CARE_ACTION_KEYS)
+        if self._panel_button_rect(panel_x, evolve_index).collidepoint(pos):
+            self.play_click_sound()
+            self.open_evolve_menu()
+            return True
 
-            for i in range(5):
-                r = pygame.Rect(
-                    panel_x,
-                    PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
-                    PANEL_W,
-                    PANEL_BTN_H
-                )
-                if r.collidepoint(pos):
-                    self.play_click_sound()
-                    if i < 4:
-                        if self.actions_used[keys[i]]:
-                            return
-                        if self.cat:
-                            actions[i]()
-                            self.actions_used[keys[i]] = True
-                            save.save_game(self.make_save_data())
-                            self.check_game_over()
-                        return
+        return False
 
-                    actions[i]()
-                    return
+    def _handle_menu_panel_click(self, pos):
+        panel_x = 8
+        if self._panel_close_rect(panel_x).collidepoint(pos):
+            self.play_click_sound()
+            self.left_panel_open = False
+            return True
 
-        if self.left_panel_open:
-            panel_x = 8
-            left_close_rect = pygame.Rect(
-                panel_x,
-                PANEL_Y - (PANEL_BTN_H + PANEL_GAP),
-                PANEL_W,
-                PANEL_BTN_H
-            )
-            if left_close_rect.collidepoint(pos):
+        actions = (self.open_settings, self.open_minigame, self.open_shop, self.open_bag, self.open_achievements)
+        for index, action in enumerate(actions):
+            if self._panel_button_rect(panel_x, index).collidepoint(pos):
                 self.play_click_sound()
-                self.left_panel_open = False
-                return
+                action()
+                return True
 
-            labels = ["설정", "미니게임", "상점", "가방", "업적"]
-            actions = [self.open_settings, self.open_minigame, self.open_shop, self.open_bag, self.open_achievements]
-            for i in range(5):
-                r = pygame.Rect(
-                    panel_x,
-                    PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP),
-                    PANEL_W,
-                    PANEL_BTN_H
-                )
-                if r.collidepoint(pos):
-                    self.play_click_sound()
-                    actions[i]()
-                    return
+        return False
 
     def handle_events(self, events):
         for event in events:
-            if event.type == pygame.QUIT:
-                if self.app_mode == "GAME" and self.scene == "MAIN" and self.cat:
-                    save.save_game(self.make_save_data())
-                self.running = False
-
-            if self.app_mode == "START_FLOW":
-                if event.type != pygame.QUIT:
-                    self.flow.handle_event(event)
+            if self._handle_quit_event(event):
                 continue
 
-            if self.app_mode == "GAME" and self.scene != "GAME_OVER":
-                if (event.type == pygame.KEYDOWN) and (event.key == pygame.K_ESCAPE):
-                    self.paused = not self.paused
-                    continue
+            if self.app_mode == "START_FLOW":
+                self.flow.handle_event(event)
+                continue
 
-                if self.paused:
-                    if event.type == pygame.QUIT:
-                        continue
+            if self._handle_pause_event(event):
+                continue
+            if self._handle_scene_key_event(event):
+                continue
+            self._handle_scene_mouse_event(event)
 
-                    action = self.pause_menu.handle_event(event) if self.pause_menu else None
-                    if action == "resume":
-                        self.paused = False
-                    elif action == "settings":
-                        self.open_settings()
-                    elif action == "to_start":
-                        self.request_to_start = True
-                    elif action == "quit":
-                        self.request_quit = True
-                    elif action == "photo":
-                        self._take_photo_toast()
-                    continue
+    def _handle_quit_event(self, event):
+        if event.type != pygame.QUIT:
+            return False
 
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_F12:
-                    self._take_photo_toast()
-                    continue
+        self._save_if_game_active()
+        self.running = False
+        return True
 
-            if event.type == pygame.KEYDOWN:
-                if self.scene == "GAME_OVER":
-                    if event.key == pygame.K_ESCAPE:
-                        self.running = False
-                    elif event.key == pygame.K_r:
-                        self.restart_game()
-                        return
+    def _handle_pause_event(self, event):
+        if self.app_mode != "GAME" or self.scene == "GAME_OVER":
+            return False
 
-                if self.scene == "EVOLVE_MENU":
-                    if event.key == pygame.K_ESCAPE:
-                        self.scene = "MAIN"
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.paused = not self.paused
+            return True
 
-            if event.type == pygame.MOUSEBUTTONDOWN and self.scene == "MAIN":
-                self.handle_click_main(event.pos)
+        if self.paused:
+            self._handle_pause_menu_action(event)
+            return True
 
-            if event.type == pygame.MOUSEBUTTONDOWN and self.scene == "EVOLVE_MENU":
-                self.handle_click_evolve_menu(event.pos)
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_F12:
+            self._take_photo_toast()
+            return True
+
+        return False
+
+    def _handle_pause_menu_action(self, event):
+        action = self.pause_menu.handle_event(event) if self.pause_menu else None
+        if action == "resume":
+            self.paused = False
+        elif action == "settings":
+            self.open_settings()
+        elif action == "to_start":
+            self.request_to_start = True
+        elif action == "quit":
+            self.request_quit = True
+        elif action == "photo":
+            self._take_photo_toast()
+
+    def _handle_scene_key_event(self, event):
+        if event.type != pygame.KEYDOWN:
+            return False
+
+        if self.scene == "GAME_OVER":
+            if event.key == pygame.K_ESCAPE:
+                self.running = False
+                return True
+            if event.key == pygame.K_r:
+                self.restart_game()
+                return True
+
+        if self.scene == "EVOLVE_MENU" and event.key == pygame.K_ESCAPE:
+            self.scene = "MAIN"
+            return True
+
+        return False
+
+    def _handle_scene_mouse_event(self, event):
+        if event.type != pygame.MOUSEBUTTONDOWN:
+            return
+        if self.scene == "MAIN":
+            self.handle_click_main(event.pos)
+        elif self.scene == "EVOLVE_MENU":
+            self.handle_click_evolve_menu(event.pos)
 
     def update(self, dt: float):
         if self.toast_timer > 0.0:
@@ -708,17 +782,19 @@ class Game:
             return
 
     def _take_photo_toast(self):
-        if not self.cat:
-            path = take_photo(self.screen, player_name="player")
-        else:
-            path = take_photo(
-                self.screen,
-                player_name=getattr(self.cat, "name", "player") or "player",
-                day=getattr(self.state, "day", None),
-                stage=getattr(self.cat, "stage", None),
-            )
-
-        self.toast_text = f"사진 저장됨: {os.path.basename(path)}"
+        try:
+            if not self.cat:
+                path = take_photo(self.screen, player_name="player")
+            else:
+                path = take_photo(
+                    self.screen,
+                    player_name=getattr(self.cat, "name", "player") or "player",
+                    day=getattr(self.state, "day", None),
+                    stage=getattr(self.cat, "stage", None),
+                )
+            self.toast_text = f"사진 저장됨: {os.path.basename(path)}"
+        except (OSError, TypeError, ValueError, pygame.error):
+            self.toast_text = "사진 저장 실패"
         self.toast_timer = 2.5
 
     def _draw_photo_toast(self):
@@ -792,6 +868,9 @@ class Game:
         self.screen.blit(panel_surf, (panel_x, panel_y))
         pygame.draw.rect(self.screen, (255, 80, 80), panel_rect, 2, border_radius=12)
 
+        self._draw_game_over_contents(panel_rect, panel_x, panel_y)
+
+    def _draw_game_over_contents(self, panel_rect, panel_x, panel_y):
         title = self.big_font.render("GAME OVER", True, (255, 80, 80))
         shadow = self.big_font.render("GAME OVER", True, (30, 30, 30))
         title_cx = panel_rect.centerx
@@ -809,20 +888,29 @@ class Game:
         self.screen.blit(hint2, hint2.get_rect(center=(panel_rect.centerx, title_y + 94)))
 
         sep_y = title_y + 108
-        pygame.draw.line(self.screen, (220, 220, 220), (panel_x + 16, sep_y), (panel_x + panel_w - 16, sep_y), 1)
+        pygame.draw.line(
+            self.screen,
+            (220, 220, 220),
+            (panel_x + 16, sep_y),
+            (panel_rect.right - 16, sep_y),
+            1,
+        )
 
         log = self.ending_log
         y = sep_y + 14
-        for line in [
+        for line in self._game_over_log_lines(log):
+            t = self.font.render(line, True, (50, 50, 50))
+            self.screen.blit(t, (panel_x + 24, y))
+            y += 22
+
+    def _game_over_log_lines(self, log):
+        return [
             f"생존 일수 : {log.get('day', 0)}일",
             f"배고픔 : {log.get('hunger', 0)}",
             f"피로 : {log.get('tiredness', 0)}",
             f"행복 : {log.get('happiness', 0)}",
             f"청결 : {log.get('cleanliness', 0)}",
-        ]:
-            t = self.font.render(line, True, (50, 50, 50))
-            self.screen.blit(t, (panel_x + 24, y))
-            y += 22
+        ]
 
     def draw_button(self, rect, text, font):
         pygame.draw.rect(self.screen, (220, 220, 220), rect)
@@ -838,61 +926,57 @@ class Game:
         txt = font.render(text, True, text_color)
         self.screen.blit(txt, txt.get_rect(center=rect.center))
 
-    def draw(self):
-        if self.scene == "EVOLVE":
-            self.draw_evolve()
-            if self.ach:
-                draw_toasts(self.screen, self.font, self.ach)
+    def _finish_frame(self, include_pause=True):
+        if self.ach:
+            draw_toasts(self.screen, self.font, self.ach)
 
-            if self.paused and self.pause_menu:
-                self.pause_menu.draw()
-            self._draw_photo_toast()
-            pygame.display.flip()
-            return
+        if include_pause and self.paused and self.pause_menu:
+            self.pause_menu.draw()
+        self._draw_photo_toast()
+        pygame.display.flip()
 
-        if self.scene == "EVOLVE_MENU":
-            self.draw_evolve_menu()
-            if self.ach:
-                draw_toasts(self.screen, self.font, self.ach)
-
-            if self.paused and self.pause_menu:
-                self.pause_menu.draw()
-            self._draw_photo_toast()
-            pygame.display.flip()
-            return
-
-        if self.scene == "GAME_OVER":
-            self.draw_game_over()
-            if self.ach:
-                draw_toasts(self.screen, self.font, self.ach)
-
-            self._draw_photo_toast()
-            pygame.display.flip()
-            return
-
+    def _draw_game_view_base(self):
         self.screen.blit(self.back_image, self.back_rect)
+        self._draw_day_phase_info()
+        self._draw_money()
+        self._draw_stats()
+        self._draw_cat_sprite()
 
+    def _draw_day_phase_info(self):
         diff_label = state.get_difficulty_label(self.difficulty)
-        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'} ({diff_label})"
+        phase_label = "아침" if self.state.time_phase == state.MORNING else "밤"
+        info = f"{self.state.day}일차 - {phase_label} ({diff_label})"
         self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
 
-
-
+    def _draw_money(self):
         money = getattr(self.state, "money", 0)
         if self.coin_image:
             self.screen.blit(self.coin_image, (INFO_X, INFO_Y + 22))
             coin_text = self.coin_font.render(f"{money}", True, (0, 0, 0))
             self.screen.blit(coin_text, (INFO_X + 42, INFO_Y + 28))
-        else:
-            coin_text = self.coin_font.render(f"🪙 {money}", True, (0, 0, 0))
-            self.screen.blit(coin_text, (INFO_X, INFO_Y + 22))
+            return
 
+        coin_text = self.coin_font.render(f"🪙 {money}", True, (0, 0, 0))
+        self.screen.blit(coin_text, (INFO_X, INFO_Y + 22))
+
+    def _draw_stats(self):
         self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
         self.draw_bar(STAT_X, STAT_Y_START + STAT_GAP, "피로", self.cat.tiredness, (100, 100, 255))
         self.draw_bar(STAT_X, STAT_Y_START + 2 * STAT_GAP, "행복", self.cat.happiness, (100, 255, 100))
         self.draw_bar(STAT_X, STAT_Y_START + 3 * STAT_GAP, "청결", self.cat.cleanliness, (180, 180, 180))
 
-        cat_img = pygame.image.load(self.cat.image_path).convert_alpha()
+    def _draw_cat_sprite(self):
+        if not self.cat or not self.cat.image_path:
+            return
+
+        if self._cat_image_path != self.cat.image_path:
+            self._cat_image_path = self.cat.image_path
+            self._cat_image = load_image(self.cat.image_path, alpha=True)
+
+        cat_img = self._cat_image
+        if cat_img is None:
+            return
+
         cat_rect = cat_img.get_rect(center=(WIDTH // 2, MAIN_CAT_Y))
         self.screen.blit(cat_img, cat_rect)
 
@@ -900,59 +984,58 @@ class Game:
         name_rect = name_text.get_rect(center=(WIDTH // 2, cat_rect.top - NAME_Y_OFFSET))
         self.screen.blit(name_text, name_rect)
 
+    def _draw_arrow_button(self, rect, label):
+        pygame.draw.rect(self.screen, (220, 220, 220), rect)
+        pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+        arrow = self.font.render(label, True, (0, 0, 0))
+        self.screen.blit(arrow, arrow.get_rect(center=rect.center))
+
+    def _draw_care_panel(self):
         if not self.panel_open:
-            pygame.draw.rect(self.screen, (220, 220, 220), ARROW_RECT)
-            pygame.draw.rect(self.screen, (0, 0, 0), ARROW_RECT, 1)
-            arrow = self.font.render("◀", True, (0, 0, 0))
-            self.screen.blit(arrow, arrow.get_rect(center=ARROW_RECT.center))
+            self._draw_arrow_button(ARROW_RECT, "◀")
+            return
 
-        if self.panel_open:
-            panel_x = WIDTH - PANEL_W - 8
+        panel_x = WIDTH - PANEL_W - 8
+        self.draw_button(self._panel_close_rect(panel_x), "▶ 닫기", self.panel_font)
 
-            close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
-            self.draw_button(close_rect, "▶ 닫기", self.panel_font)
+        for index, label in enumerate(CARE_ACTION_LABELS):
+            rect = self._panel_button_rect(panel_x, index)
+            if index < len(CARE_ACTION_KEYS):
+                self.draw_button_state(rect, label, self.panel_font, not self.actions_used[CARE_ACTION_KEYS[index]])
+            else:
+                self.draw_button(rect, label, self.panel_font)
 
-            labels = ["밥", "놀기", "씻기", "잠자기", "진화"]
-            for i, label in enumerate(labels):
-                r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
-                if i == 0:
-                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["feed"])
-                elif i == 1:
-                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["play"])
-                elif i == 2:
-                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["clean"])
-                elif i == 3:
-                    self.draw_button_state(r, label, self.panel_font, not self.actions_used["sleep"])
-                else:
-                    self.draw_button(r, label, self.panel_font)
-
+    def _draw_menu_panel(self):
         if not self.left_panel_open:
-            pygame.draw.rect(self.screen, (220, 220, 220), LEFT_ARROW_RECT)
-            pygame.draw.rect(self.screen, (0, 0, 0), LEFT_ARROW_RECT, 1)
-            l_arrow = self.font.render("▶", True, (0, 0, 0))
-            self.screen.blit(l_arrow, l_arrow.get_rect(center=LEFT_ARROW_RECT.center))
+            self._draw_arrow_button(LEFT_ARROW_RECT, "▶")
+            return
 
-        if self.left_panel_open:
-            panel_x = 8
-            left_close_rect = pygame.Rect(panel_x, PANEL_Y - (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
-            self.draw_button(left_close_rect, "닫기 ◀", self.panel_font)
-            labels = ["설정", "미니게임", "상점", "가방", "업적"]
-            for i, label in enumerate(labels):
-                r = pygame.Rect(panel_x, PANEL_Y + i * (PANEL_BTN_H + PANEL_GAP), PANEL_W, PANEL_BTN_H)
-                self.draw_button(r, label, self.panel_font)
+        panel_x = 8
+        self.draw_button(self._panel_close_rect(panel_x), "닫기 ◀", self.panel_font)
+        for index, label in enumerate(MENU_ACTION_LABELS):
+            self.draw_button(self._panel_button_rect(panel_x, index), label, self.panel_font)
 
-        center_x = (WIDTH - BOTTOM_BTN_W) // 2
-        advance_rect = pygame.Rect(center_x, BOTTOM_BTN_Y, BOTTOM_BTN_W, BOTTOM_BTN_H)
-        self.draw_button(advance_rect, "다음 시간", self.tab_font)
+    def draw(self):
+        if self.scene == "EVOLVE":
+            self.draw_evolve()
+            self._finish_frame()
+            return
 
-        if self.ach:
-            draw_toasts(self.screen, self.font, self.ach)
+        if self.scene == "EVOLVE_MENU":
+            self.draw_evolve_menu()
+            self._finish_frame()
+            return
 
-        if self.paused and self.pause_menu:
-            self.pause_menu.draw()
-        self._draw_photo_toast()
+        if self.scene == "GAME_OVER":
+            self.draw_game_over()
+            self._finish_frame(include_pause=False)
+            return
 
-        pygame.display.flip()
+        self._draw_game_view_base()
+        self._draw_care_panel()
+        self._draw_menu_panel()
+        self.draw_button(self._advance_rect(), "다음 시간", self.tab_font)
+        self._finish_frame()
 
     def draw_evolve(self):
         if not self.paused:
@@ -969,34 +1052,7 @@ class Game:
             self.scene = "MAIN"
 
     def draw_evolve_menu(self):
-        self.screen.blit(self.back_image, self.back_rect)
-
-        diff_label = state.get_difficulty_label(self.difficulty)
-        info = f"{self.state.day}일차 - {'아침' if self.state.time_phase == state.MORNING else '밤'} ({diff_label})"
-        self.screen.blit(self.font.render(info, True, (0, 0, 0)), (INFO_X, INFO_Y))
-
-        money = getattr(self.state, "money", 0)
-        if self.coin_image:
-            self.screen.blit(self.coin_image, (INFO_X, INFO_Y + 22))
-            coin_text = self.coin_font.render(f"{money}", True, (0, 0, 0))
-            self.screen.blit(coin_text, (INFO_X + 42, INFO_Y + 28))
-        else:
-            coin_text = self.coin_font.render(f"🪙 {money}", True, (0, 0, 0))
-            self.screen.blit(coin_text, (INFO_X, INFO_Y + 22))
-
-        self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
-        self.draw_bar(STAT_X, STAT_Y_START + STAT_GAP, "피로", self.cat.tiredness, (100, 100, 255))
-        self.draw_bar(STAT_X, STAT_Y_START + 2 * STAT_GAP, "행복", self.cat.happiness, (100, 255, 100))
-        self.draw_bar(STAT_X, STAT_Y_START + 3 * STAT_GAP, "청결", self.cat.cleanliness, (180, 180, 180))
-
-        if self.cat and self.cat.image_path:
-            cat_img = pygame.image.load(self.cat.image_path).convert_alpha()
-            cat_rect = cat_img.get_rect(center=(WIDTH // 2, MAIN_CAT_Y))
-            self.screen.blit(cat_img, cat_rect)
-
-            name_text = self.name_font.render(f"{self.cat.name} - {self.cat.stage}", True, (0, 0, 0))
-            name_rect = name_text.get_rect(center=(WIDTH // 2, cat_rect.top - NAME_Y_OFFSET))
-            self.screen.blit(name_text, name_rect)
+        self._draw_game_view_base()
 
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 140))
@@ -1014,7 +1070,13 @@ class Game:
 
         title = self.big_font.render("진화", True, (30, 30, 30))
         self.screen.blit(title, title.get_rect(center=(panel_rect.centerx, panel_y + 26)))
-        pygame.draw.line(self.screen, (220, 220, 220), (panel_x + 16, panel_y + 50), (panel_x + panel_w - 16, panel_y + 50), 1)
+        pygame.draw.line(
+            self.screen,
+            (220, 220, 220),
+            (panel_x + 16, panel_y + 50),
+            (panel_x + panel_w - 16, panel_y + 50),
+            1,
+        )
 
         info = self.get_evolve_menu_info()
         y = panel_y + 66

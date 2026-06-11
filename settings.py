@@ -16,6 +16,7 @@ class SettingsScreen:
 
         self.font = load_font(FONT_PATH, 18)
         self.big_font = load_font(FONT_PATH, 22)
+        self.message = ""
 
         self.reset_rect = pygame.Rect(100, 300, 200, 44)
         self.back_rect = pygame.Rect(100, 360, 200, 36)
@@ -38,12 +39,18 @@ class SettingsScreen:
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.reset_rect.collidepoint(event.pos):
-                    save.reset_save()
-                    self.restart_callback()
-                    self.running = False
+                    self.reset_data()
 
                 elif self.back_rect.collidepoint(event.pos):
                     self.running = False
+
+    def reset_data(self):
+        if save.reset_save():
+            self.restart_callback()
+            self.running = False
+            return True
+        self.message = "초기화 실패"
+        return False
 
     def draw_button(self, rect, text):
         pygame.draw.rect(self.screen, (230, 230, 230), rect)
@@ -65,5 +72,8 @@ class SettingsScreen:
 
         self.draw_button(self.reset_rect, "데이터 초기화")
         self.draw_button(self.back_rect, "뒤로가기")
+        if self.message:
+            msg = self.font.render(self.message, True, (160, 40, 40))
+            self.screen.blit(msg, msg.get_rect(center=(WIDTH // 2, 410)))
 
         pygame.display.flip()

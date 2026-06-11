@@ -5,6 +5,14 @@ import json
 from pathlib import Path
 import time
 
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(frozen=True)
 class AchievementDef:
     aid: str
@@ -73,7 +81,7 @@ class AchievementsManager:
             data = json.loads(self.save_path.read_text(encoding="utf-8"))
             self.unlocked = {k: float(v) for k, v in data.get("unlocked", {}).items()}
             self.counters.update({k: int(v) for k, v in data.get("counters", {}).items()})
-        except Exception:
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
 
     def save(self) -> None:
@@ -81,7 +89,11 @@ class AchievementsManager:
             "unlocked": self.unlocked,
             "counters": self.counters,
         }
-        self.save_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            self.save_path.parent.mkdir(parents=True, exist_ok=True)
+            self.save_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except (OSError, TypeError, ValueError):
+            pass
 
     def is_unlocked(self, aid: str) -> bool:
         return aid in self.unlocked
@@ -95,7 +107,6 @@ class AchievementsManager:
 
         self.unlocked[aid] = time.time()
         self.toast_queue.append((f"업적 해금! {d.title}", d.desc, time.time() + 2.5))
-        self.save()
 
     def _unlock_by_def(self, d: AchievementDef) -> None:
         self._unlock(d.aid)
@@ -109,7 +120,7 @@ class AchievementsManager:
             self.counters["days_survived"] += 1
 
         elif event == "coins_earned":
-            amt = int(payload.get("amount", 0))
+            amt = _safe_int(payload.get("amount", 0))
             if amt > 0:
                 self.counters["coins_total"] += amt
 
@@ -133,10 +144,10 @@ class AchievementsManager:
         self.save()
 
     def check_stats_on_day_end(self, stats: Dict[str, int]) -> None:
-        h = int(stats.get("happiness", 0))
-        c = int(stats.get("cleanliness", 0))
-        hu = int(stats.get("hunger", 0))
-        f = int(stats.get("fatigue", 0))
+        h = _safe_int(stats.get("happiness", 0))
+        c = _safe_int(stats.get("cleanliness", 0))
+        hu = _safe_int(stats.get("hunger", 0))
+        f = _safe_int(stats.get("fatigue", 0))
 
         for d in self.defs:
             if d.a_type != "stat":

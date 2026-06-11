@@ -32,9 +32,10 @@ def _dpapi_protect(data: bytes) -> bytes:
             ("pbData", ctypes.POINTER(ctypes.c_byte)),
         ]
 
-    def _bytes_to_blob(buf_bytes: bytes) -> _DATA_BLOB:
+    def _bytes_to_blob(buf_bytes: bytes):
         buf = ctypes.create_string_buffer(buf_bytes)
-        return _DATA_BLOB(len(buf_bytes), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
+        blob = _DATA_BLOB(len(buf_bytes), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
+        return blob, buf
 
     def _blob_to_bytes(blob: _DATA_BLOB) -> bytes:
         if not blob.pbData:
@@ -44,10 +45,11 @@ def _dpapi_protect(data: bytes) -> bytes:
         finally:
             ctypes.windll.kernel32.LocalFree(blob.pbData)
 
-    in_blob = _bytes_to_blob(data)
+    in_blob, in_buf = _bytes_to_blob(data)
     out_blob = _DATA_BLOB()
-    entropy_blob = _bytes_to_blob(_entropy())
+    entropy_blob, entropy_buf = _bytes_to_blob(_entropy())
 
+    # DATA_BLOB stores pointers; keep the backing buffers alive until DPAPI returns.
     ok = ctypes.windll.crypt32.CryptProtectData(
         ctypes.byref(in_blob),
         None,
@@ -76,9 +78,10 @@ def _dpapi_unprotect(data: bytes) -> bytes:
             ("pbData", ctypes.POINTER(ctypes.c_byte)),
         ]
 
-    def _bytes_to_blob(buf_bytes: bytes) -> _DATA_BLOB:
+    def _bytes_to_blob(buf_bytes: bytes):
         buf = ctypes.create_string_buffer(buf_bytes)
-        return _DATA_BLOB(len(buf_bytes), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
+        blob = _DATA_BLOB(len(buf_bytes), ctypes.cast(buf, ctypes.POINTER(ctypes.c_byte)))
+        return blob, buf
 
     def _blob_to_bytes(blob: _DATA_BLOB) -> bytes:
         if not blob.pbData:
@@ -88,10 +91,11 @@ def _dpapi_unprotect(data: bytes) -> bytes:
         finally:
             ctypes.windll.kernel32.LocalFree(blob.pbData)
 
-    in_blob = _bytes_to_blob(data)
+    in_blob, in_buf = _bytes_to_blob(data)
     out_blob = _DATA_BLOB()
-    entropy_blob = _bytes_to_blob(_entropy())
+    entropy_blob, entropy_buf = _bytes_to_blob(_entropy())
 
+    # DATA_BLOB stores pointers; keep the backing buffers alive until DPAPI returns.
     ok = ctypes.windll.crypt32.CryptUnprotectData(
         ctypes.byref(in_blob),
         None,
@@ -125,9 +129,15 @@ def load_hmac_key() -> Optional[bytes]:
     if not _KEY_FILE.exists():
         return None
 
-    blob = _KEY_FILE.read_bytes()
+    try:
+        blob = _KEY_FILE.read_bytes()
+    except OSError:
+        return None
     if _is_windows():
-        return _dpapi_unprotect(blob)
+        try:
+            return _dpapi_unprotect(blob)
+        except OSError:
+            return None
     return blob
 
 
@@ -142,12 +152,13 @@ def get_or_create_hmac_key(*, num_bytes: int = 32) -> bytes:
         blob = _dpapi_protect(key)
     else:
         blob = key
-        try:
-            os.chmod(_KEY_FILE, 0o600)
-        except Exception:
-            pass
 
     _KEY_FILE.write_bytes(blob)
+    if not _is_windows():
+        try:
+            os.chmod(_KEY_FILE, 0o600)
+        except OSError:
+            pass
     return key
 
 

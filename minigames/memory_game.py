@@ -1,23 +1,16 @@
 import pygame
 import random
-import os
 
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import load_font, load_image, solid_surface
 
 WIDTH = 400
 HEIGHT = 600
 
 GRID_COLS = 4
 GRID_ROWS = 4
-CARD_SIZE = 72
-CARD_GAP = 10
-
-BOARD_X = 30
-BOARD_Y = 90
-
-ASSET_DIR = asset_path("minigames", "memory_game")
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
+MISMATCH_EVENT = pygame.USEREVENT + 1
 
 class MemoryGame:
     def __init__(self, screen, state):
@@ -56,16 +49,12 @@ class MemoryGame:
         self.won = False
         self.reward_coins = 0
 
-        self.back_image = None
-        back_path = os.path.join(ASSET_DIR, "memoryback.png")
-        try:
-            img = pygame.image.load(back_path).convert_alpha()
-            self.back_image = pygame.transform.smoothscale(img, (self.card_size, self.card_size))
-        except:
-            self.back_image = None
-        if self.back_image is None:
-            self.back_image = pygame.Surface((self.card_size, self.card_size))
-            self.back_image.fill((180, 180, 180))
+        self.back_image = load_image(
+            asset_path("minigames", "memory_game", "memoryback.png"),
+            size=(self.card_size, self.card_size),
+            smooth=True,
+            alpha=True,
+        ) or solid_surface((self.card_size, self.card_size), (180, 180, 180))
 
         self.load_cards()
 
@@ -80,17 +69,12 @@ class MemoryGame:
 
         images = {}
         for idx, cid in enumerate(chosen):
-            img_surface = None
-            path = os.path.join(ASSET_DIR, f"memory{cid}.png")
-            try:
-                img_surface = pygame.image.load(path).convert_alpha()
-                img_surface = pygame.transform.smoothscale(img_surface, (self.card_size, self.card_size))
-            except:
-                img_surface = None
-            if img_surface is None:
-                img_surface = pygame.Surface((self.card_size, self.card_size))
-                img_surface.fill(colors[idx % len(colors)])
-            images[cid] = img_surface
+            images[cid] = load_image(
+                asset_path("minigames", "memory_game", f"memory{cid}.png"),
+                size=(self.card_size, self.card_size),
+                smooth=True,
+                alpha=True,
+            ) or solid_surface((self.card_size, self.card_size), colors[idx % len(colors)])
 
         ids = chosen * 2
         random.shuffle(ids)
@@ -139,7 +123,22 @@ class MemoryGame:
         else:
             self.lock = True
             self.fail_count += 1
-            pygame.time.set_timer(pygame.USEREVENT, 700)
+            self._set_mismatch_timer(700)
+
+    def _set_mismatch_timer(self, milliseconds: int):
+        try:
+            pygame.time.set_timer(MISMATCH_EVENT, milliseconds)
+        except pygame.error:
+            pass
+
+    def handle_mismatch_timeout(self):
+        if self.first is not None and self.second is not None:
+            self.first["revealed"] = False
+            self.second["revealed"] = False
+        self.first = None
+        self.second = None
+        self.lock = False
+        self._set_mismatch_timer(0)
 
     def update(self):
         now = pygame.time.get_ticks()
@@ -203,13 +202,8 @@ class MemoryGame:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
 
-                elif event.type == pygame.USEREVENT:
-                    self.first["revealed"] = False
-                    self.second["revealed"] = False
-                    self.first = None
-                    self.second = None
-                    self.lock = False
-                    pygame.time.set_timer(pygame.USEREVENT, 0)
+                elif event.type == MISMATCH_EVENT:
+                    self.handle_mismatch_timeout()
 
             self.update()
             self.draw()

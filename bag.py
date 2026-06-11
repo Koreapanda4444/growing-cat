@@ -1,10 +1,8 @@
 import pygame
 
 from config import asset_path
-from pg_utils import load_font
-
-WIDTH = 400
-HEIGHT = 600
+from items import get_item_info
+from pg_utils import load_font, load_image
 
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
@@ -25,28 +23,6 @@ class BagUI:
 
         self.close_rect = pygame.Rect(360, 10, 30, 30)
         self.item_rects = []
-
-        self.item_info = {
-            "bab": {"name": "밥", "image": asset_path("foods", "bab.png")},
-            "fish": {"name": "생선", "image": asset_path("foods", "fish.png")},
-            "chur": {"name": "츄르", "image": asset_path("foods", "chur.png")},
-            "meat": {"name": "고기", "image": asset_path("evolution", "meat.png")},
-            "doggrass": {"name": "강아지풀", "image": asset_path("toys", "doggrass.png")},
-            "fishing": {"name": "낚싯대", "image": asset_path("toys", "fishing.png")},
-            "string": {"name": "실", "image": asset_path("toys", "string.png")},
-            "bone": {"name": "뼈", "image": asset_path("evolution", "bone.png")},
-
-            "사료": {"name": "밥", "image": asset_path("foods", "bab.png")},
-            "밥": {"name": "밥", "image": asset_path("foods", "bab.png")},
-            "생선": {"name": "생선", "image": asset_path("foods", "fish.png")},
-            "츄르": {"name": "츄르", "image": asset_path("foods", "chur.png")},
-            "고기": {"name": "고기", "image": asset_path("evolution", "meat.png")},
-            "풀밭": {"name": "강아지풀", "image": asset_path("toys", "doggrass.png")},
-            "강아지풀": {"name": "강아지풀", "image": asset_path("toys", "doggrass.png")},
-            "낚싯대": {"name": "낚싯대", "image": asset_path("toys", "fishing.png")},
-            "실": {"name": "실", "image": asset_path("toys", "string.png")},
-            "뼈": {"name": "뼈", "image": asset_path("evolution", "bone.png")},
-        }
 
     def run(self):
         clock = pygame.time.Clock()
@@ -96,12 +72,13 @@ class BagUI:
         size = 80
         gap = 30
 
-        items = list(self.inventory.keys())
+        items = [
+            item_id
+            for item_id, count in self.inventory.items()
+            if count > 0
+        ]
 
         for i, item_id in enumerate(items):
-            if self.inventory[item_id] <= 0:
-                continue
-
             x = start_x + (i % 2) * (size + gap + 20)
             y = start_y + (i // 2) * (size + 70)
 
@@ -109,13 +86,10 @@ class BagUI:
             pygame.draw.rect(self.screen, (220, 220, 220), icon_rect)
             pygame.draw.rect(self.screen, BORDER, icon_rect, 2)
 
-            item_info = self.item_info.get(item_id, {})
-            try:
-                img = pygame.image.load(item_info.get("image", "")).convert_alpha()
-                img = pygame.transform.scale(img, (size - 4, size - 4))
+            item_info = get_item_info(item_id)
+            img = load_image(item_info.get("image", ""), size=(size - 4, size - 4), smooth=False)
+            if img:
                 self.screen.blit(img, (x + 2, y + 2))
-            except:
-                pass
 
             name = self.font.render(item_info.get("name", item_id), True, (0, 0, 0))
             self.screen.blit(name, (x + 6, y + size + 4))

@@ -11,6 +11,8 @@ PERSONALITY_ENERGETIC = "energetic"
 PERSONALITY_CALM = "calm"
 PERSONALITY_LAZY = "lazy"
 
+MINIGAME_KEYS = ("jump", "memory", "footsteps", "laser")
+
 DIFFICULTY_PROFILE = {
     DIFFICULTY_EASY: {
         "label": "쉬움",
@@ -96,6 +98,18 @@ def get_personality_label(personality: str | None) -> str:
     return get_personality_profile(personality)["label"]
 
 
+def new_minigame_usage() -> dict[str, bool]:
+    return {key: False for key in MINIGAME_KEYS}
+
+
+def normalize_minigame_usage(value) -> dict[str, bool]:
+    usage = new_minigame_usage()
+    if isinstance(value, dict):
+        for key in MINIGAME_KEYS:
+            usage[key] = bool(value.get(key, False))
+    return usage
+
+
 class GameState:
     def __init__(self, difficulty: str = DIFFICULTY_NORMAL, personality: str = PERSONALITY_ENERGETIC):
         self.difficulty = normalize_difficulty(difficulty)
@@ -103,7 +117,7 @@ class GameState:
         self.day = 1
         self.time_phase = MORNING
         self.money = 0
-        self.minigame_used = {"jump": False, "memory": False, "footsteps": False, "laser": False}
+        self.minigame_used = new_minigame_usage()
 
     def advance_time(self):
         if self.time_phase == MORNING:
@@ -116,10 +130,12 @@ class GameState:
 
 MAX_STAT = 100
 
+
 def clamp(value):
     return max(0, min(value, MAX_STAT))
 
 
+def rand_range(rng: tuple[int, int]) -> int:
     return random.randint(rng[0], rng[1])
 
 

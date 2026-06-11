@@ -34,8 +34,15 @@ class Cat:
             return None
 
         try:
-            files = [f for f in os.listdir(folder) if not f.startswith(".")]
-        except FileNotFoundError:
+            files = [
+                f for f in os.listdir(folder)
+                if (
+                    not f.startswith(".")
+                    and f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+                    and os.path.isfile(os.path.join(folder, f))
+                )
+            ]
+        except OSError:
             return None
 
         if not files:
@@ -59,12 +66,25 @@ class Cat:
             return prof[stat_type]
         return 1.0
 
+    def _roll_stat_change(self, rng, difficulty_kind: str, modifier_key: str, *, inverse_modifier: bool = False) -> int:
+        value = state.rand_range(state.scaled_range(rng, self.difficulty, difficulty_kind))
+        modifier = self._get_personality_modifier(modifier_key)
+        if inverse_modifier:
+            return int(value / modifier)
+        return int(value * modifier)
+
     def on_night(self):
-        if not self._can_act(): return
-        hunger_inc = int(state.rand_range(state.scaled_range(state.NIGHT_HUNGER_INC, self.difficulty, "pressure")) * self._get_personality_modifier("hunger_increase"))
-        tiredness_inc = int(state.rand_range(state.scaled_range(state.NIGHT_TIREDNESS_INC, self.difficulty, "pressure")) * self._get_personality_modifier("tiredness_increase"))
-        happiness_dec = int(state.rand_range(state.scaled_range(state.NIGHT_HAPPINESS_DEC, self.difficulty, "pressure")) / self._get_personality_modifier("happiness_recovery"))
-        cleanliness_dec = int(state.rand_range(state.scaled_range(state.NIGHT_CLEANLINESS_DEC, self.difficulty, "pressure")) * self._get_personality_modifier("cleanliness_decrease"))
+        if not self._can_act():
+            return
+        hunger_inc = self._roll_stat_change(state.NIGHT_HUNGER_INC, "pressure", "hunger_increase")
+        tiredness_inc = self._roll_stat_change(state.NIGHT_TIREDNESS_INC, "pressure", "tiredness_increase")
+        happiness_dec = self._roll_stat_change(
+            state.NIGHT_HAPPINESS_DEC,
+            "pressure",
+            "happiness_recovery",
+            inverse_modifier=True,
+        )
+        cleanliness_dec = self._roll_stat_change(state.NIGHT_CLEANLINESS_DEC, "pressure", "cleanliness_decrease")
         
         self.hunger += hunger_inc
         self.tiredness += tiredness_inc
@@ -75,11 +95,12 @@ class Cat:
         self._check_runaway()
 
     def on_morning(self):
-        if not self._can_act(): return
-        hunger_inc = int(state.rand_range(state.scaled_range(state.MORNING_HUNGER_INC, self.difficulty, "pressure")) * self._get_personality_modifier("hunger_increase"))
-        tiredness_dec = int(state.rand_range(state.scaled_range(state.MORNING_TIREDNESS_DEC, self.difficulty, "recovery")) * self._get_personality_modifier("tiredness_recovery"))
-        happiness_inc = int(state.rand_range(state.scaled_range(state.MORNING_HAPPINESS_INC, self.difficulty, "recovery")) * self._get_personality_modifier("happiness_recovery"))
-        cleanliness_dec = int(state.rand_range(state.scaled_range(state.MORNING_CLEANLINESS_DEC, self.difficulty, "pressure")) * self._get_personality_modifier("cleanliness_decrease"))
+        if not self._can_act():
+            return
+        hunger_inc = self._roll_stat_change(state.MORNING_HUNGER_INC, "pressure", "hunger_increase")
+        tiredness_dec = self._roll_stat_change(state.MORNING_TIREDNESS_DEC, "recovery", "tiredness_recovery")
+        happiness_inc = self._roll_stat_change(state.MORNING_HAPPINESS_INC, "recovery", "happiness_recovery")
+        cleanliness_dec = self._roll_stat_change(state.MORNING_CLEANLINESS_DEC, "pressure", "cleanliness_decrease")
         
         self.hunger += hunger_inc
         self.tiredness -= tiredness_dec
@@ -90,20 +111,27 @@ class Cat:
         self._check_runaway()
 
     def feed_free(self):
-        if not self._can_act(): return
-        hunger_dec = int(state.rand_range(state.scaled_range(state.FREE_FEED_HUNGER_DEC, self.difficulty, "recovery")) / self._get_personality_modifier("hunger_increase"))
-        happiness_inc = int(state.rand_range(state.scaled_range(state.FREE_FEED_HAPPINESS_INC, self.difficulty, "recovery")) * self._get_personality_modifier("happiness_recovery"))
+        if not self._can_act():
+            return
+        hunger_dec = self._roll_stat_change(
+            state.FREE_FEED_HUNGER_DEC,
+            "recovery",
+            "hunger_increase",
+            inverse_modifier=True,
+        )
+        happiness_inc = self._roll_stat_change(state.FREE_FEED_HAPPINESS_INC, "recovery", "happiness_recovery")
         
         self.hunger -= hunger_dec
         self.happiness += happiness_inc
         self._clamp_all()
 
     def play_free(self):
-        if not self._can_act(): return
-        happiness_inc = int(state.rand_range(state.scaled_range(state.FREE_PLAY_HAPPINESS_INC, self.difficulty, "recovery")) * self._get_personality_modifier("happiness_recovery"))
-        tiredness_inc = int(state.rand_range(state.scaled_range(state.FREE_PLAY_TIREDNESS_INC, self.difficulty, "pressure")) * self._get_personality_modifier("tiredness_increase"))
-        hunger_inc = int(state.rand_range(state.scaled_range(state.FREE_PLAY_HUNGER_INC, self.difficulty, "pressure")) * self._get_personality_modifier("hunger_increase"))
-        cleanliness_dec = int(state.rand_range(state.scaled_range(state.FREE_PLAY_CLEANLINESS_DEC, self.difficulty, "pressure")) * self._get_personality_modifier("cleanliness_decrease"))
+        if not self._can_act():
+            return
+        happiness_inc = self._roll_stat_change(state.FREE_PLAY_HAPPINESS_INC, "recovery", "happiness_recovery")
+        tiredness_inc = self._roll_stat_change(state.FREE_PLAY_TIREDNESS_INC, "pressure", "tiredness_increase")
+        hunger_inc = self._roll_stat_change(state.FREE_PLAY_HUNGER_INC, "pressure", "hunger_increase")
+        cleanliness_dec = self._roll_stat_change(state.FREE_PLAY_CLEANLINESS_DEC, "pressure", "cleanliness_decrease")
         
         self.happiness += happiness_inc
         self.tiredness += tiredness_inc
@@ -112,18 +140,30 @@ class Cat:
         self._clamp_all()
 
     def clean(self):
-        if not self._can_act(): return
-        cleanliness_inc = int(state.rand_range(state.scaled_range(state.CLEAN_CLEANLINESS_INC, self.difficulty, "recovery")) / self._get_personality_modifier("cleanliness_decrease"))
-        happiness_dec = int(state.rand_range(state.scaled_range(state.CLEAN_HAPPINESS_DEC, self.difficulty, "pressure")) / self._get_personality_modifier("happiness_recovery"))
+        if not self._can_act():
+            return
+        cleanliness_inc = self._roll_stat_change(
+            state.CLEAN_CLEANLINESS_INC,
+            "recovery",
+            "cleanliness_decrease",
+            inverse_modifier=True,
+        )
+        happiness_dec = self._roll_stat_change(
+            state.CLEAN_HAPPINESS_DEC,
+            "pressure",
+            "happiness_recovery",
+            inverse_modifier=True,
+        )
         
         self.cleanliness += cleanliness_inc
         self.happiness -= happiness_dec
         self._clamp_all()
 
     def sleep(self):
-        if not self._can_act(): return
-        tiredness_dec = int(state.rand_range(state.scaled_range(state.SLEEP_TIREDNESS_DEC, self.difficulty, "recovery")) * self._get_personality_modifier("tiredness_recovery"))
-        happiness_inc = int(state.rand_range(state.scaled_range(state.SLEEP_HAPPINESS_INC, self.difficulty, "recovery")) * self._get_personality_modifier("happiness_recovery"))
+        if not self._can_act():
+            return
+        tiredness_dec = self._roll_stat_change(state.SLEEP_TIREDNESS_DEC, "recovery", "tiredness_recovery")
+        happiness_inc = self._roll_stat_change(state.SLEEP_HAPPINESS_INC, "recovery", "happiness_recovery")
         
         self.tiredness -= tiredness_dec
         self.happiness += happiness_inc
@@ -143,7 +183,10 @@ class Cat:
             self.alive = False
 
     def _check_runaway(self):
-        if self.happiness <= state.RUNAWAY_HAPPINESS_THRESHOLD or self.cleanliness <= state.RUNAWAY_CLEANLINESS_THRESHOLD:
+        if (
+            self.happiness <= state.RUNAWAY_HAPPINESS_THRESHOLD
+            or self.cleanliness <= state.RUNAWAY_CLEANLINESS_THRESHOLD
+        ):
             self.runaway = True
 
     def check_game_over(self):

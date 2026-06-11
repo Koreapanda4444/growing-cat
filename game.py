@@ -1,6 +1,5 @@
 import pygame
 import sys
-import os
 import state as game_state
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
@@ -10,8 +9,6 @@ from minigames.laser_chase import run_laser_chase
 from config import asset_path
 from pg_utils import load_font
 
-WIDTH = 400
-HEIGHT = 600
 FPS = 60    
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
@@ -54,123 +51,91 @@ class MiniGameScreen:
     def handle_click(self, pos):
         if self.btn_close.collidepoint(pos):
             self.running = False
-        elif self.card_avoid.collidepoint(pos):
+            return
+
+        if self.card_avoid.collidepoint(pos):
             self.selected = "jump"
-        elif self.card_memory.collidepoint(pos):
+            return
+        if self.card_memory.collidepoint(pos):
             self.selected = "memory"
-        elif self.card_footsteps.collidepoint(pos):
+            return
+        if self.card_footsteps.collidepoint(pos):
             self.selected = "footsteps"
-        elif self.card_laser.collidepoint(pos):
+            return
+        if self.card_laser.collidepoint(pos):
             self.selected = "laser"
-        elif self.btn_start.collidepoint(pos):
-            if self.selected:
-                if self.selected == "jump" and self.state:
-                    if getattr(self.state, "minigame_used", {}).get("jump"):
-                        return
-                    if self.ach:
-                        self.ach.on_event("minigame_played")
-                    result = CatRunGame(self.screen, self.state).run()
-                    if result and self.state:
-                        try:
-                            coins = int(result.get("coins", 0))
-                        except (TypeError, ValueError):
-                            coins = 0
-                        difficulty = getattr(self.state, "difficulty", "normal")
-                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
-                        coins = max(0, coins)
-                        try:
-                            self.state.money = max(0, int(self.state.money) + coins)
-                        except (TypeError, ValueError):
-                            self.state.money = coins
+            return
+        if self.btn_start.collidepoint(pos):
+            self.start_selected_game()
 
-                        if self.ach and coins > 0:
-                            self.ach.on_event("coins_earned", amount=coins)
+    def start_selected_game(self):
+        if not self.selected:
+            return
+        if not self.state:
+            self.running = False
+            return
 
-                        if self.ach and coins > 0:
-                            self.ach.on_event("minigame_won")
-                    self.state.minigame_used["jump"] = True
-                elif self.selected == "memory" and self.state:
-                    if getattr(self.state, "minigame_used", {}).get("memory"):
-                        return
-                    if self.ach:
-                        self.ach.on_event("minigame_played")
+        self._ensure_minigame_usage()
+        if self.state.minigame_used.get(self.selected):
+            return
 
-                    result = MemoryGame(self.screen, self.state).run()
-                    if isinstance(result, dict):
-                        try:
-                            coins = int(result.get("coins", 0))
-                        except (TypeError, ValueError):
-                            coins = 0
-                        difficulty = getattr(self.state, "difficulty", "normal")
-                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
-                        coins = max(0, coins)
-                        if coins:
-                            try:
-                                self.state.money = max(0, int(self.state.money) + coins)
-                            except (TypeError, ValueError):
-                                self.state.money = coins
-                            if self.ach:
-                                self.ach.on_event("coins_earned", amount=coins)
+        if self.ach:
+            self.ach.on_event("minigame_played")
 
-                        if self.ach and bool(result.get("won")):
-                            self.ach.on_event("minigame_won")
+        result = self._run_minigame(self.selected)
+        self._apply_minigame_result(
+            result,
+            win_on_positive_coins=self.selected == "jump",
+        )
+        self.state.minigame_used[self.selected] = True
+        self.running = False
 
-                    self.state.minigame_used["memory"] = True
-                elif self.selected == "footsteps" and self.state:
-                    if getattr(self.state, "minigame_used", {}).get("footsteps"):
-                        return
-                    if self.ach:
-                        self.ach.on_event("minigame_played")
+    def _ensure_minigame_usage(self):
+        self.state.minigame_used = game_state.normalize_minigame_usage(
+            getattr(self.state, "minigame_used", None)
+        )
 
-                    result = CatFollowGame(self.screen, self.state, self.ach).run()
-                    if isinstance(result, dict):
-                        try:
-                            coins = int(result.get("coins", 0))
-                        except (TypeError, ValueError):
-                            coins = 0
-                        difficulty = getattr(self.state, "difficulty", "normal")
-                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
-                        coins = max(0, coins)
-                        if coins:
-                            try:
-                                self.state.money = max(0, int(self.state.money) + coins)
-                            except (TypeError, ValueError):
-                                self.state.money = coins
-                            if self.ach:
-                                self.ach.on_event("coins_earned", amount=coins)
+    def _run_minigame(self, minigame_id):
+        if minigame_id == "jump":
+            return CatRunGame(self.screen, self.state).run()
+        if minigame_id == "memory":
+            return MemoryGame(self.screen, self.state).run()
+        if minigame_id == "footsteps":
+            return CatFollowGame(self.screen, self.state).run()
+        if minigame_id == "laser":
+            return run_laser_chase(self.screen)
+        return None
 
-                        if self.ach and bool(result.get("won")):
-                            self.ach.on_event("minigame_won")
+    def _apply_minigame_result(self, result, *, win_on_positive_coins=False):
+        if not isinstance(result, dict):
+            return
 
-                    self.state.minigame_used["footsteps"] = True
-                elif self.selected == "laser" and self.state:
-                    if getattr(self.state, "minigame_used", {}).get("laser"):
-                        return
-                    if self.ach:
-                        self.ach.on_event("minigame_played")
+        coins = self._scaled_result_coins(result)
+        if coins > 0:
+            self._add_coins(coins)
+            if self.ach:
+                self.ach.on_event("coins_earned", amount=coins)
 
-                    result = run_laser_chase(self.screen, ach=self.ach)
-                    if isinstance(result, dict):
-                        try:
-                            coins = int(result.get("coins", 0))
-                        except (TypeError, ValueError):
-                            coins = 0
-                        difficulty = getattr(self.state, "difficulty", "normal")
-                        coins = game_state.scale_coin(coins, difficulty, source="minigame")
-                        coins = max(0, coins)
-                        if coins:
-                            try:
-                                self.state.money = max(0, int(self.state.money) + coins)
-                            except (TypeError, ValueError):
-                                self.state.money = coins
-                            if self.ach:
-                                self.ach.on_event("coins_earned", amount=coins)
+        won = bool(result.get("won")) or (win_on_positive_coins and coins > 0)
+        if self.ach and won:
+            self.ach.on_event("minigame_won")
 
-                        if self.ach and bool(result.get("won")):
-                            self.ach.on_event("minigame_won")
+    def _scaled_result_coins(self, result):
+        try:
+            raw_coins = int(result.get("coins", 0))
+        except (TypeError, ValueError):
+            raw_coins = 0
 
-                    self.state.minigame_used["laser"] = True
-                self.running = False
+        difficulty = getattr(self.state, "difficulty", "normal")
+        coins = game_state.scale_coin(raw_coins, difficulty, source="minigame")
+        return max(0, coins)
+
+    def _add_coins(self, coins):
+        try:
+            current = max(0, int(self.state.money))
+        except (TypeError, ValueError):
+            current = 0
+        self.state.money = current + max(0, int(coins))
 
     def draw_card(self, rect, title, selected=False, disabled=False):
         color = (220, 220, 220)
@@ -188,7 +153,8 @@ class MiniGameScreen:
 
         pygame.draw.rect(self.screen, (220, 220, 220), self.btn_close)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_close, 1)
-        self.screen.blit(self.font.render("X", True, (0, 0, 0)), self.font.render("X", True, (0, 0, 0)).get_rect(center=self.btn_close.center))
+        close_text = self.font.render("X", True, (0, 0, 0))
+        self.screen.blit(close_text, close_text.get_rect(center=self.btn_close.center))
 
         used_jump = getattr(self.state, "minigame_used", {}).get("jump", False) if self.state else False
         used_memory = getattr(self.state, "minigame_used", {}).get("memory", False) if self.state else False
@@ -201,6 +167,7 @@ class MiniGameScreen:
 
         pygame.draw.rect(self.screen, (200, 200, 200), self.btn_start)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_start, 1)
-        self.screen.blit(self.font.render("시작하기", True, (0, 0, 0)), self.font.render("시작하기", True, (0, 0, 0)).get_rect(center=self.btn_start.center))
+        start_text = self.font.render("시작하기", True, (0, 0, 0))
+        self.screen.blit(start_text, start_text.get_rect(center=self.btn_start.center))
 
         pygame.display.flip()

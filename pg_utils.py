@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import pygame
@@ -13,19 +12,25 @@ def load_font(font_path: Optional[str], size: int) -> pygame.font.Font:
     try:
         if font_path:
             return pygame.font.Font(font_path, int(size))
-    except Exception:
+    except (OSError, TypeError, ValueError, pygame.error):
         pass
     return pygame.font.Font(None, int(size))
 
 
-def load_image(path: str, *, size: Optional[Size] = None, smooth: bool = True, alpha: bool = True) -> Optional[pygame.Surface]:
+def load_image(
+    path: str,
+    *,
+    size: Optional[Size] = None,
+    smooth: bool = True,
+    alpha: bool = True,
+) -> Optional[pygame.Surface]:
     try:
         surf = pygame.image.load(path)
         surf = surf.convert_alpha() if alpha else surf.convert()
         if size is not None:
             surf = pygame.transform.smoothscale(surf, size) if smooth else pygame.transform.scale(surf, size)
         return surf
-    except Exception:
+    except (OSError, TypeError, ValueError, pygame.error):
         return None
 
 
@@ -42,7 +47,7 @@ def load_sound(path: str, *, volume: Optional[float] = None) -> Optional[pygame.
         if volume is not None:
             s.set_volume(float(volume))
         return s
-    except Exception:
+    except (OSError, TypeError, ValueError, pygame.error):
         return None
 
 
@@ -53,5 +58,5 @@ def play_music(path: str, *, volume: Optional[float] = None, loops: int = -1) ->
             pygame.mixer.music.set_volume(float(volume))
         pygame.mixer.music.play(loops)
         return True
-    except Exception:
+    except (OSError, TypeError, ValueError, pygame.error):
         return False
