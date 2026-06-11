@@ -608,7 +608,12 @@ class Game:
 
     def open_settings(self):
         from settings import SettingsScreen
-        SettingsScreen(self.screen, self.restart_game).run()
+        SettingsScreen(
+            self.screen,
+            self.restart_game,
+            game=self,
+            play_click_sound=self.play_click_sound,
+        ).run()
 
     def open_shop(self):
         shop = ShopUI(
