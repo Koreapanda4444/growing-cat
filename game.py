@@ -103,7 +103,8 @@ class MiniGameScreen:
         if minigame_id == "footsteps":
             return CatFollowGame(self.screen, self.state).run()
         if minigame_id == "laser":
-            return run_laser_chase(self.screen)
+            difficulty = getattr(self.state, "difficulty", "normal")
+            return run_laser_chase(self.screen, difficulty=difficulty)
         return None
 
     def _apply_minigame_result(self, result, *, win_on_positive_coins=False):
@@ -150,6 +151,9 @@ class MiniGameScreen:
         self.screen.fill((235, 235, 235))
 
         self.screen.blit(self.big_font.render("미니게임", True, (0, 0, 0)), (20, 20))
+        difficulty = getattr(self.state, "difficulty", "normal") if self.state else "normal"
+        difficulty_label = game_state.get_difficulty_label(difficulty)
+        self.screen.blit(self.font.render(f"난이도: {difficulty_label}", True, (70, 70, 70)), (20, 54))
 
         pygame.draw.rect(self.screen, (220, 220, 220), self.btn_close)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_close, 1)

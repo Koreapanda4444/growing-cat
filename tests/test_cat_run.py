@@ -1,5 +1,6 @@
 import unittest
 
+import state
 from minigames.cat_run import CatRunGame
 
 
@@ -26,6 +27,19 @@ class CatRunGameTests(unittest.TestCase):
         game.update()
 
         self.assertGreater(game.obstacle_speed, game.base_obstacle_speed)
+
+    def test_obstacle_settings_follow_selected_difficulty_profile(self):
+        easy = CatRunGame.__new__(CatRunGame)
+        easy.balance = state.get_minigame_profile("easy", "jump")
+        easy._init_obstacles()
+
+        hard = CatRunGame.__new__(CatRunGame)
+        hard.balance = state.get_minigame_profile("hard", "jump")
+        hard._init_obstacles()
+
+        self.assertLess(easy.base_obstacle_speed, hard.base_obstacle_speed)
+        self.assertGreater(easy.min_spawn_meters, hard.min_spawn_meters)
+        self.assertGreater(easy.spawn_delay, hard.spawn_delay)
 
 
 if __name__ == "__main__":

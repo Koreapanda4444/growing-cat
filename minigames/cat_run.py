@@ -4,6 +4,7 @@ import sys
 
 from config import asset_path
 from pg_utils import load_font, load_image, solid_surface
+import state as game_state
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
@@ -16,6 +17,8 @@ class CatRunGame:
     def __init__(self, screen, state=None, on_game_end=None):
         self.screen = screen
         self.state = state
+        self.difficulty = game_state.normalize_difficulty(getattr(state, "difficulty", None))
+        self.balance = game_state.get_minigame_profile(self.difficulty, "jump")
         self.on_game_end = on_game_end
         self.clock = pygame.time.Clock()
         self.running = True
@@ -85,19 +88,39 @@ class CatRunGame:
 
     def _init_obstacles(self):
         self.obstacles = []
-        self.base_obstacle_speed = 4.0
+        self.base_obstacle_speed = float(self.balance["base_speed"])
+        self.obstacle_speed_step = float(self.balance["speed_step"])
         self.obstacle_speed = self.base_obstacle_speed
         self.spawn_timer = 0
-        self.spawn_delay = 90
-        self.min_spawn_meters = 20
-        self.max_spawn_meters = 40
+        self.spawn_base_delay = int(self.balance["spawn_delay"])
+        self.spawn_delay_floor = int(self.balance["spawn_delay_floor"])
+        self.spawn_delay_step = int(self.balance["spawn_delay_step"])
+        self.spawn_delay = self.spawn_base_delay
+        self.base_min_spawn_meters = int(self.balance["min_spawn_meters"])
+        self.base_max_spawn_meters = int(self.balance["max_spawn_meters"])
+        self.spawn_meter_floor = int(self.balance["spawn_meter_floor"])
+        self.spawn_meter_step = int(self.balance["spawn_meter_step"])
+        self.min_spawn_meters = self.base_min_spawn_meters
+        self.max_spawn_meters = self.base_max_spawn_meters
         self.pixels_per_meter = 10
         self.next_spawn_frames = self._compute_next_spawn_frames()
 
     def update_difficulty(self):
         difficulty_level = int(self.distance) // 100
-        self.obstacle_speed = self.base_obstacle_speed + (difficulty_level * 1.0)
-        self.spawn_delay = max(50, 90 - (difficulty_level * 5))
+        speed_step = getattr(self, "obstacle_speed_step", 1.0)
+        spawn_delay_floor = getattr(self, "spawn_delay_floor", 50)
+        spawn_delay_step = getattr(self, "spawn_delay_step", 5)
+        spawn_base_delay = getattr(self, "spawn_base_delay", 90)
+        self.obstacle_speed = self.base_obstacle_speed + (difficulty_level * speed_step)
+        self.spawn_delay = max(spawn_delay_floor, spawn_base_delay - (difficulty_level * spawn_delay_step))
+
+        if not hasattr(self, "base_min_spawn_meters") or not hasattr(self, "base_max_spawn_meters"):
+            return
+
+        meter_drop = difficulty_level * getattr(self, "spawn_meter_step", 1)
+        floor = getattr(self, "spawn_meter_floor", 14)
+        self.min_spawn_meters = max(floor, self.base_min_spawn_meters - meter_drop)
+        self.max_spawn_meters = max(self.min_spawn_meters + 6, self.base_max_spawn_meters - meter_drop)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -183,7 +206,7 @@ class CatRunGame:
         meters = random.randint(self.min_spawn_meters, self.max_spawn_meters)
         speed = max(0.1, self.obstacle_speed)
         frames = int((meters * self.pixels_per_meter) / speed)
-        return max(10, frames)
+        return max(10, min(int(getattr(self, "spawn_delay", frames)), frames))
 
 
 if __name__ == "__main__":

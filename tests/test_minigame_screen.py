@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from game import MiniGameScreen
 
@@ -52,6 +53,17 @@ class MiniGameScreenTests(unittest.TestCase):
         self.assertTrue(screen.running)
         self.assertEqual(screen.state.money, 0)
         self.assertEqual(screen.ach.events, [])
+
+    def test_laser_receives_selected_difficulty(self):
+        screen = object.__new__(MiniGameScreen)
+        screen.screen = object()
+        screen.state = SimpleNamespace(difficulty="hard")
+
+        with patch("game.run_laser_chase", return_value={"won": False, "coins": 0}) as laser:
+            result = MiniGameScreen._run_minigame(screen, "laser")
+
+        self.assertEqual(result, {"won": False, "coins": 0})
+        laser.assert_called_once_with(screen.screen, difficulty="hard")
 
 
 if __name__ == "__main__":

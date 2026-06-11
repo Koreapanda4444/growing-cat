@@ -1,6 +1,6 @@
 import unittest
 
-from minigames.laser_chase import _coins_from_score, _update_particles
+from minigames.laser_chase import _coins_from_score, _laser_settings, _update_particles
 
 
 class LaserChaseHelpersTests(unittest.TestCase):
@@ -19,6 +19,18 @@ class LaserChaseHelpersTests(unittest.TestCase):
 
         _update_particles(particles, 0.06)
         self.assertEqual(particles, [])
+
+    def test_laser_settings_follow_selected_difficulty(self):
+        easy = _laser_settings("easy")
+        normal = _laser_settings("normal")
+        hard = _laser_settings("hard")
+
+        self.assertGreater(easy["time_limit"], normal["time_limit"])
+        self.assertGreater(normal["time_limit"], hard["time_limit"])
+        self.assertLess(easy["target_score"], normal["target_score"])
+        self.assertLess(normal["target_score"], hard["target_score"])
+        self.assertLess(easy["base_speed"], normal["base_speed"])
+        self.assertLess(normal["base_speed"], hard["base_speed"])
 
 
 if __name__ == "__main__":

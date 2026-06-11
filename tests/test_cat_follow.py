@@ -42,6 +42,15 @@ class CatFollowLogicTests(unittest.TestCase):
         self.assertEqual(game.rounds_cleared, 1)
         self.assertEqual(game.round_idx, 2)
 
+    def test_sequence_length_can_grow_by_round(self):
+        game = object.__new__(CatFollowGame)
+        game.start_len = 4
+        game.sequence_growth = 2
+
+        self.assertEqual(game._sequence_length_for_round(1), 4)
+        self.assertEqual(game._sequence_length_for_round(2), 6)
+        self.assertEqual(game._sequence_length_for_round(3), 8)
+
 
 if __name__ == "__main__":
     unittest.main()

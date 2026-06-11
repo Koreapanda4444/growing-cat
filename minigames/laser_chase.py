@@ -2,6 +2,8 @@ import random
 import math
 import pygame
 
+import state as game_state
+
 
 def _get_font(size: int) -> pygame.font.Font:
     for name in ("malgungothic", "AppleGothic", "NanumGothic", "Noto Sans CJK KR"):
@@ -28,6 +30,20 @@ def _coins_from_score(score_val: int, won_flag: bool) -> int:
     if won_flag:
         base += 25
     return base
+
+
+def _laser_settings(difficulty: str | None = "normal") -> dict:
+    profile = game_state.get_minigame_profile(difficulty, "laser")
+    return {
+        "time_limit": float(profile["time_limit"]),
+        "target_score": int(profile["target_score"]),
+        "base_radius": int(profile["base_radius"]),
+        "min_radius": int(profile["min_radius"]),
+        "base_speed": float(profile["base_speed"]),
+        "max_speed": float(profile["max_speed"]),
+        "combo_grace": float(profile["combo_grace"]),
+        "miss_penalty": int(profile["miss_penalty"]),
+    }
 
 
 def _spawn_hit_particles(particles, px, py, n=10):
@@ -95,27 +111,28 @@ def _draw_result(screen, fonts, screen_w, screen_h, won, score):
     screen.blit(hint, hint.get_rect(center=(screen_w // 2, int(screen_h * 0.66))))
 
 
-def run_laser_chase(screen: pygame.Surface, ach=None) -> dict:
+def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "normal") -> dict:
     if not pygame.font.get_init():
         pygame.font.init()
 
     clock = pygame.time.Clock()
     W, H = screen.get_size()
     fonts = _get_laser_fonts(H)
+    settings = _laser_settings(difficulty)
 
-    TIME_LIMIT = 32.0
+    TIME_LIMIT = settings["time_limit"]
 
-    TARGET_SCORE = 480
+    TARGET_SCORE = settings["target_score"]
 
-    BASE_RADIUS = 30
-    MIN_RADIUS = 18
+    BASE_RADIUS = settings["base_radius"]
+    MIN_RADIUS = settings["min_radius"]
 
-    BASE_SPEED = 320.0
-    MAX_SPEED = 720.0
+    BASE_SPEED = settings["base_speed"]
+    MAX_SPEED = settings["max_speed"]
 
-    COMBO_GRACE = 1.5
+    COMBO_GRACE = settings["combo_grace"]
 
-    MISS_PENALTY = 4
+    MISS_PENALTY = settings["miss_penalty"]
 
     x = random.uniform(W * 0.25, W * 0.75)
     y = random.uniform(H * 0.30, H * 0.70)

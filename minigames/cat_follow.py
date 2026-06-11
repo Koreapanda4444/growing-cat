@@ -4,6 +4,7 @@ import pygame
 
 from config import asset_path
 from pg_utils import load_font, load_image, solid_surface
+import state as game_state
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 ASSET_DIR = asset_path("minigames", "cat_follow")
@@ -14,6 +15,8 @@ class CatFollowGame:
         self.screen = screen
         self.state = state
         self.ach = ach
+        self.difficulty = game_state.normalize_difficulty(getattr(state, "difficulty", None))
+        self.balance = game_state.get_minigame_profile(self.difficulty, "footsteps")
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -21,16 +24,17 @@ class CatFollowGame:
         self.font_big = load_font(FONT_PATH, 38)
 
         self.grid = 5
-        self.start_len = 5
-        self.target_round = 3
-        self.show_on_s = 0.5
-        self.show_off_s = 0.15
-        self.max_fails = 1
+        self.start_len = int(self.balance["start_len"])
+        self.target_round = int(self.balance["target_round"])
+        self.sequence_growth = int(self.balance["sequence_growth"])
+        self.show_on_s = float(self.balance["show_on_s"])
+        self.show_off_s = float(self.balance["show_off_s"])
+        self.max_fails = int(self.balance["max_fails"])
 
         self.cats_correct = 0
         self.rounds_cleared = 0
         self.round_idx = 1
-        self.seq_len = self.start_len
+        self.seq_len = self._sequence_length_for_round(self.round_idx)
         self.fails = 0
 
         self.phase = "SHOW"
@@ -66,6 +70,11 @@ class CatFollowGame:
     def _new_sequence(self, length: int):
         g = self.grid
         return [(random.randrange(g), random.randrange(g)) for _ in range(length)]
+
+    def _sequence_length_for_round(self, round_idx: int):
+        start_len = getattr(self, "start_len", getattr(self, "seq_len", 1))
+        growth = getattr(self, "sequence_growth", 0)
+        return max(1, int(start_len + max(0, round_idx - 1) * growth))
 
     def _coins_from(self, cats_correct: int, rounds_cleared: int):
         cats_correct = max(0, int(cats_correct))
@@ -170,6 +179,7 @@ class CatFollowGame:
         if self.round_idx > self.target_round:
             self._finish(True)
         else:
+            self.seq_len = self._sequence_length_for_round(self.round_idx)
             self._restart_show_phase(regenerate_sequence=True)
 
     def _handle_wrong_input(self):

@@ -3,6 +3,7 @@ import random
 
 from config import asset_path
 from pg_utils import load_font, load_image, solid_surface
+import state as game_state
 
 WIDTH = 400
 HEIGHT = 600
@@ -16,6 +17,8 @@ class MemoryGame:
     def __init__(self, screen, state):
         self.screen = screen
         self.state = state
+        self.difficulty = game_state.normalize_difficulty(getattr(state, "difficulty", None))
+        self.balance = game_state.get_minigame_profile(self.difficulty, "memory")
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -44,7 +47,11 @@ class MemoryGame:
         self.started = False
         self.reveal_end_ms = None
         self.limit_start_ms = None
-        self.time_limit_ms = 30000
+        self.preview_ms = int(self.balance["preview_ms"])
+        self.time_limit_ms = int(self.balance["time_limit_ms"])
+        self.mismatch_ms = int(self.balance["mismatch_ms"])
+        self.reward_base = int(self.balance["reward_base"])
+        self.fail_penalty = int(self.balance["fail_penalty"])
 
         self.won = False
         self.reward_coins = 0
@@ -93,7 +100,7 @@ class MemoryGame:
             })
 
         now = pygame.time.get_ticks()
-        self.reveal_end_ms = now + 3000
+        self.reveal_end_ms = now + self.preview_ms
 
     def handle_click(self, pos):
         if self.lock or not self.started:
@@ -123,7 +130,7 @@ class MemoryGame:
         else:
             self.lock = True
             self.fail_count += 1
-            self._set_mismatch_timer(700)
+            self._set_mismatch_timer(getattr(self, "mismatch_ms", 700))
 
     def _set_mismatch_timer(self, milliseconds: int):
         try:
@@ -150,7 +157,9 @@ class MemoryGame:
             self.limit_start_ms = now
 
         if all(c["matched"] for c in self.cards):
-            reward = max(10, 80 - 10 * self.fail_count)
+            reward_base = getattr(self, "reward_base", 80)
+            fail_penalty = getattr(self, "fail_penalty", 10)
+            reward = max(10, reward_base - fail_penalty * self.fail_count)
             self.won = True
             try:
                 self.reward_coins = max(0, int(reward))

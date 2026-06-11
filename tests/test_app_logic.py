@@ -39,6 +39,19 @@ class AppLogicTests(unittest.TestCase):
         self.assertEqual(game.inventory, {"사료": 1})
         self.assertEqual(game.ach.events[0][0], "item_bought")
 
+    def test_start_new_game_applies_selected_difficulty_to_state_and_cat(self):
+        game = object.__new__(Game)
+
+        with patch("app.save.save_game", return_value=True):
+            Game.start_new_game(game, "nabi", difficulty="hard", personality="calm")
+
+        self.assertEqual(game.difficulty, "hard")
+        self.assertEqual(game.personality, "calm")
+        self.assertEqual(game.state.difficulty, "hard")
+        self.assertEqual(game.state.personality, "calm")
+        self.assertEqual(game.cat.difficulty, "hard")
+        self.assertEqual(game.cat.personality, "calm")
+
     def test_unknown_shop_item_does_not_charge_or_unlock(self):
         game = self.make_game()
         game.state.money = 100

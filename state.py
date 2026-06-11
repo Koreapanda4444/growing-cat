@@ -16,12 +16,12 @@ MINIGAME_KEYS = ("jump", "memory", "footsteps", "laser")
 DIFFICULTY_PROFILE = {
     DIFFICULTY_EASY: {
         "label": "쉬움",
-        "stat_pressure": 0.80,
-        "stat_recovery": 1.20,
-        "day_coin": 8,
-        "minigame_coin": 1.20,
-        "shop_price": 0.90,
-        "evolution_cost": 0.90,
+        "stat_pressure": 0.70,
+        "stat_recovery": 1.30,
+        "day_coin": 9,
+        "minigame_coin": 1.25,
+        "shop_price": 0.85,
+        "evolution_cost": 0.85,
     },
     DIFFICULTY_NORMAL: {
         "label": "보통",
@@ -34,12 +34,129 @@ DIFFICULTY_PROFILE = {
     },
     DIFFICULTY_HARD: {
         "label": "어려움",
-        "stat_pressure": 1.25,
-        "stat_recovery": 0.90,
+        "stat_pressure": 1.35,
+        "stat_recovery": 0.80,
         "day_coin": 4,
-        "minigame_coin": 0.85,
-        "shop_price": 1.10,
-        "evolution_cost": 1.15,
+        "minigame_coin": 0.80,
+        "shop_price": 1.20,
+        "evolution_cost": 1.25,
+    },
+}
+
+MINIGAME_DIFFICULTY_PROFILE = {
+    DIFFICULTY_EASY: {
+        "jump": {
+            "base_speed": 3.4,
+            "speed_step": 0.7,
+            "spawn_delay": 110,
+            "spawn_delay_floor": 65,
+            "spawn_delay_step": 4,
+            "min_spawn_meters": 26,
+            "max_spawn_meters": 50,
+            "spawn_meter_floor": 18,
+            "spawn_meter_step": 1,
+        },
+        "memory": {
+            "preview_ms": 4200,
+            "time_limit_ms": 40000,
+            "mismatch_ms": 850,
+            "reward_base": 90,
+            "fail_penalty": 8,
+        },
+        "footsteps": {
+            "start_len": 4,
+            "target_round": 3,
+            "sequence_growth": 0,
+            "show_on_s": 0.65,
+            "show_off_s": 0.22,
+            "max_fails": 3,
+        },
+        "laser": {
+            "time_limit": 38.0,
+            "target_score": 410,
+            "base_radius": 34,
+            "min_radius": 20,
+            "base_speed": 260.0,
+            "max_speed": 650.0,
+            "combo_grace": 1.8,
+            "miss_penalty": 2,
+        },
+    },
+    DIFFICULTY_NORMAL: {
+        "jump": {
+            "base_speed": 4.0,
+            "speed_step": 1.0,
+            "spawn_delay": 90,
+            "spawn_delay_floor": 50,
+            "spawn_delay_step": 5,
+            "min_spawn_meters": 20,
+            "max_spawn_meters": 40,
+            "spawn_meter_floor": 14,
+            "spawn_meter_step": 1,
+        },
+        "memory": {
+            "preview_ms": 3000,
+            "time_limit_ms": 30000,
+            "mismatch_ms": 700,
+            "reward_base": 80,
+            "fail_penalty": 10,
+        },
+        "footsteps": {
+            "start_len": 5,
+            "target_round": 3,
+            "sequence_growth": 1,
+            "show_on_s": 0.50,
+            "show_off_s": 0.15,
+            "max_fails": 2,
+        },
+        "laser": {
+            "time_limit": 32.0,
+            "target_score": 480,
+            "base_radius": 30,
+            "min_radius": 18,
+            "base_speed": 320.0,
+            "max_speed": 720.0,
+            "combo_grace": 1.5,
+            "miss_penalty": 4,
+        },
+    },
+    DIFFICULTY_HARD: {
+        "jump": {
+            "base_speed": 4.7,
+            "speed_step": 1.25,
+            "spawn_delay": 76,
+            "spawn_delay_floor": 40,
+            "spawn_delay_step": 6,
+            "min_spawn_meters": 16,
+            "max_spawn_meters": 32,
+            "spawn_meter_floor": 10,
+            "spawn_meter_step": 2,
+        },
+        "memory": {
+            "preview_ms": 2400,
+            "time_limit_ms": 24000,
+            "mismatch_ms": 550,
+            "reward_base": 75,
+            "fail_penalty": 12,
+        },
+        "footsteps": {
+            "start_len": 6,
+            "target_round": 4,
+            "sequence_growth": 1,
+            "show_on_s": 0.38,
+            "show_off_s": 0.10,
+            "max_fails": 1,
+        },
+        "laser": {
+            "time_limit": 27.0,
+            "target_score": 580,
+            "base_radius": 26,
+            "min_radius": 16,
+            "base_speed": 380.0,
+            "max_speed": 820.0,
+            "combo_grace": 1.15,
+            "miss_penalty": 8,
+        },
     },
 }
 
@@ -84,6 +201,16 @@ def normalize_personality(personality: str | None) -> str:
 
 def get_difficulty_profile(difficulty: str | None) -> dict:
     return DIFFICULTY_PROFILE[normalize_difficulty(difficulty)]
+
+
+def get_minigame_profile(difficulty: str | None, minigame_id: str | None = None) -> dict:
+    profile = MINIGAME_DIFFICULTY_PROFILE[normalize_difficulty(difficulty)]
+    if minigame_id is None:
+        return profile
+    if minigame_id in profile:
+        return profile[minigame_id]
+    normal_profile = MINIGAME_DIFFICULTY_PROFILE[DIFFICULTY_NORMAL]
+    return normal_profile[minigame_id] if minigame_id in normal_profile else {}
 
 
 def get_difficulty_label(difficulty: str | None) -> str:
