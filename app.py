@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+import random
 from cat import Cat
 import state
 from game import MiniGameScreen
@@ -52,6 +53,37 @@ NAME_Y_OFFSET = 1
 CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
 MENU_ACTION_LABELS = ("설정", "미니게임", "상점", "가방", "업적")
+CAT_IMAGE_ROTATE_CHANCE = 0.20
+
+CAT_CLICK_LINES = {
+    "energetic": (
+        "놀아줘서 좋다냥!",
+        "한 번 더 쓰다듬어 달라냥.",
+        "오늘은 기분이 반짝반짝하다냥!",
+    ),
+    "calm": (
+        "조용히 곁에 있어줘서 좋다냥.",
+        "따뜻한 손길이다냥.",
+        "천천히 쉬고 싶다냥.",
+    ),
+    "lazy": (
+        "조금만 더 누워있고 싶다냥.",
+        "포근해서 잠이 온다냥.",
+        "간식 생각이 난다냥.",
+    ),
+    "default": (
+        "냐옹.",
+        "기분이 좋아 보인다냥.",
+        "주인을 바라보고 있다냥.",
+    ),
+}
+
+CAT_NEED_LINES = (
+    ("hunger", 80, "배고파... 밥 생각이 난다냥."),
+    ("tiredness", 80, "졸려... 조금 쉬고 싶다냥."),
+    ("happiness", 25, "오늘은 조금 심심하다냥."),
+    ("cleanliness", 25, "몸이 찝찝하다냥."),
+)
 
 
 def safe_int(value, default=0):
@@ -107,6 +139,8 @@ class Game:
 
         self.toast_text = ""
         self.toast_timer = 0.0
+        self.cat_dialogue_text = ""
+        self.cat_dialogue_timer = 0.0
 
         self.difficulty = "normal"
 
@@ -154,6 +188,8 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
+        self._cat_rect = None
+        self._cat_click_count = 0
         if not hasattr(self.state, "minigame_used"):
             self.state.minigame_used = state.new_minigame_usage()
         self.evolve_timer = 0
@@ -258,6 +294,12 @@ class Game:
         self.cat = Cat(name, "아기고양이", difficulty=self.difficulty, personality=self.personality)
         self.inventory = {}
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self._cat_image_path = None
+        self._cat_image = None
+        self._cat_rect = None
+        self._cat_click_count = 0
+        self.cat_dialogue_text = ""
+        self.cat_dialogue_timer = 0.0
         self.panel_open = False
         self.left_panel_open = False
         self.game_over_reason = None
@@ -390,6 +432,10 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
+        self._cat_rect = None
+        self._cat_click_count = 0
+        self.cat_dialogue_text = ""
+        self.cat_dialogue_timer = 0.0
         self.flow.reset_to_start()
         self.app_mode = "START_FLOW"
 
@@ -650,6 +696,46 @@ class Game:
         if self.left_panel_open and self._handle_menu_panel_click(pos):
             return
 
+        if self._handle_cat_click(pos):
+            return
+
+    def _handle_cat_click(self, pos):
+        if not self.cat:
+            return False
+
+        cat_rect = getattr(self, "_cat_rect", None)
+        if cat_rect is None or not cat_rect.collidepoint(pos):
+            return False
+
+        self.play_click_sound()
+        self._cat_click_count = max(0, safe_int(getattr(self, "_cat_click_count", 0), 0)) + 1
+        self.cat_dialogue_text = self._cat_dialogue_line()
+        self.cat_dialogue_timer = 2.2
+
+        if random.random() < CAT_IMAGE_ROTATE_CHANCE and self.cat.rotate_image():
+            self._cat_image_path = None
+            self._cat_image = None
+            save.save_game(self.make_save_data())
+        return True
+
+    def _cat_dialogue_line(self):
+        for stat_name, threshold, line in CAT_NEED_LINES:
+            value = getattr(self.cat, stat_name, 0)
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                value = 0
+
+            if stat_name in ("happiness", "cleanliness"):
+                if value <= threshold:
+                    return line
+            elif value >= threshold:
+                return line
+
+        personality = state.normalize_personality(getattr(self.cat, "personality", None))
+        lines = CAT_CLICK_LINES.get(personality, CAT_CLICK_LINES["default"])
+        return random.choice(lines)
+
     def _handle_care_panel_click(self, pos):
         panel_x = WIDTH - PANEL_W - 8
         if self._panel_close_rect(panel_x).collidepoint(pos):
@@ -777,6 +863,8 @@ class Game:
     def update(self, dt: float):
         if self.toast_timer > 0.0:
             self.toast_timer = max(0.0, float(self.toast_timer) - float(dt))
+        if self.cat_dialogue_timer > 0.0:
+            self.cat_dialogue_timer = max(0.0, float(self.cat_dialogue_timer) - float(dt))
 
         if self.paused:
             return
@@ -815,6 +903,32 @@ class Game:
         x = 12
         y = self.screen.get_height() - bg_h - 12
         self.screen.blit(bg, (x, y))
+
+    def _draw_cat_dialogue(self):
+        if self.scene != "MAIN":
+            return
+        if getattr(self, "paused", False):
+            return
+        if self.cat_dialogue_timer <= 0.0 or not self.cat_dialogue_text:
+            return
+
+        cat_rect = getattr(self, "_cat_rect", None)
+        if cat_rect is None:
+            return
+
+        font = self.hint_font if hasattr(self, "hint_font") and self.hint_font else self.font
+        label = font.render(self.cat_dialogue_text, True, (0, 0, 0))
+        pad_x, pad_y = 12, 8
+        bubble_w = min(WIDTH - 24, label.get_width() + pad_x * 2)
+        bubble_h = label.get_height() + pad_y * 2
+        bubble = pygame.Rect(0, 0, bubble_w, bubble_h)
+        bubble.centerx = WIDTH // 2
+        bubble.bottom = max(42, cat_rect.top - 22)
+
+        pygame.draw.rect(self.screen, (255, 255, 255), bubble, border_radius=10)
+        pygame.draw.rect(self.screen, (0, 0, 0), bubble, width=2, border_radius=10)
+        text_rect = label.get_rect(center=bubble.center)
+        self.screen.blit(label, text_rect)
 
     def handle_click_evolve_menu(self, pos):
         panel_w, panel_h = 340, 260
@@ -932,6 +1046,7 @@ class Game:
 
         if include_pause and self.paused and self.pause_menu:
             self.pause_menu.draw()
+        self._draw_cat_dialogue()
         self._draw_photo_toast()
         pygame.display.flip()
 
@@ -967,6 +1082,7 @@ class Game:
 
     def _draw_cat_sprite(self):
         if not self.cat or not self.cat.image_path:
+            self._cat_rect = None
             return
 
         if self._cat_image_path != self.cat.image_path:
@@ -975,9 +1091,11 @@ class Game:
 
         cat_img = self._cat_image
         if cat_img is None:
+            self._cat_rect = None
             return
 
         cat_rect = cat_img.get_rect(center=(WIDTH // 2, MAIN_CAT_Y))
+        self._cat_rect = cat_rect
         self.screen.blit(cat_img, cat_rect)
 
         name_text = self.name_font.render(f"{self.cat.name} - {self.cat.stage}", True, (0, 0, 0))

@@ -4,6 +4,8 @@ import os
 
 from config import asset_path
 
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+
 CAT_IMAGE_DIR = {
     "아기고양이": asset_path("cats", "baby"),
     "어른고양이": asset_path("cats", "adult"),
@@ -28,27 +30,46 @@ class Cat:
 
         self.image_path = image_path or self.random_image()
 
-    def random_image(self):
+    def available_images(self):
         folder = CAT_IMAGE_DIR.get(self.stage)
         if not folder:
-            return None
+            return []
 
         try:
             files = [
                 f for f in os.listdir(folder)
                 if (
                     not f.startswith(".")
-                    and f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+                    and f.lower().endswith(IMAGE_EXTENSIONS)
                     and os.path.isfile(os.path.join(folder, f))
                 )
             ]
         except OSError:
-            return None
+            return []
 
+        return [os.path.join(folder, f) for f in sorted(files)]
+
+    def random_image(self):
+        files = self.available_images()
         if not files:
             return None
+        return random.choice(files)
 
-        return os.path.join(folder, random.choice(files))
+    def rotate_image(self):
+        files = self.available_images()
+        if len(files) <= 1:
+            return False
+
+        current = os.path.normcase(os.path.abspath(self.image_path or ""))
+        candidates = [
+            path for path in files
+            if os.path.normcase(os.path.abspath(path)) != current
+        ]
+        if not candidates:
+            return False
+
+        self.image_path = random.choice(candidates)
+        return True
 
     def evolve_to(self, new_stage):
         self.stage = new_stage
