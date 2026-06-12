@@ -53,6 +53,10 @@ def default_achievements() -> List[AchievementDef]:
         AchievementDef("A052", "완벽한 하루", "행복/청결 80↑, 배고픔/피로 30↓로 하루를 마무리했다.", "stat", "perfect_day", points=50),
 
         AchievementDef("A060", "고양이도 잠수함을 탄다", "…뭔가 이상한 일이 있었다.", "once", "weird_event", hidden=True, points=70),
+
+        AchievementDef("A070", "첫 출전", "고양이 대회에 처음 참가했다.", "once", "competition_entered"),
+        AchievementDef("A071", "무대 체질", "고양이 대회에서 S등급을 받았다.", "once", "competition_s_grade", points=30),
+        AchievementDef("A072", "대회 단골", "고양이 대회에 10회 참가했다.", "counter", "competition_count", 10, points=50),
     ]
 
 class AchievementsManager:
@@ -68,6 +72,7 @@ class AchievementsManager:
             "items_bought": 0,
             "minigame_play_count": 0,
             "minigame_win_count": 0,
+            "competition_count": 0,
         }
 
         self.toast_queue: List[Tuple[str, str, float]] = []
@@ -132,6 +137,13 @@ class AchievementsManager:
 
         elif event == "minigame_won":
             self.counters["minigame_win_count"] += 1
+
+        elif event == "competition_entered":
+            self.counters["competition_count"] += 1
+            if str(payload.get("grade", "")).upper() == "S":
+                for d in self.defs:
+                    if d.a_type == "once" and d.target_key == "competition_s_grade":
+                        self._unlock_by_def(d)
 
         elif event == "evolved":
             stage = str(payload.get("stage", "")).strip()

@@ -8,8 +8,10 @@ from game import MiniGameScreen
 from shop import ShopUI
 from bag import BagUI
 from album import AlbumUI
+from competition_ui import CompetitionUI
 import save
 import evolution
+import competition
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import load_font, load_image, load_sound, play_music
@@ -66,7 +68,7 @@ CAT_IMAGE_LAYOUT_OVERRIDES = {
 
 CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
-MENU_ACTION_LABELS = ("설정", "미니게임", "상점", "가방", "업적", "앨범")
+MENU_ACTION_LABELS = ("설정", "미니게임", "대회", "상점", "가방", "업적", "앨범")
 CAT_IMAGE_ROTATE_CHANCE = 0.20
 
 CAT_CLICK_LINES = {
@@ -323,6 +325,7 @@ class Game:
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
+        self.competition = competition.new_competition_data()
         self.scene = "MAIN"
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
@@ -372,6 +375,7 @@ class Game:
         self.state.money = max(0, safe_int(data.get("money", 0), 0))
         self.inventory = normalize_inventory(data.get("inventory", {}))
         self.state.minigame_used = state.normalize_minigame_usage(data.get("minigame_used"))
+        self.competition = competition.normalize_competition_data(data.get("competition"))
         self.scene = "MAIN"
 
     def load_image(self, filename):
@@ -435,6 +439,7 @@ class Game:
 
         self.cat = Cat(name, "아기고양이", difficulty=self.difficulty, personality=self.personality)
         self.inventory = {}
+        self.competition = competition.new_competition_data()
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
@@ -574,6 +579,7 @@ class Game:
         self.game_over_reason = None
         self.ending_log = {}
         self.inventory = {}
+        self.competition = competition.new_competition_data()
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
@@ -615,6 +621,7 @@ class Game:
             "money": clean_money,
             "inventory": clean_inventory,
             "minigame_used": state.normalize_minigame_usage(getattr(self.state, "minigame_used", None)),
+            "competition": competition.copy_for_save(getattr(self, "competition", None)),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
@@ -651,6 +658,64 @@ class Game:
     def open_minigame(self):
         MiniGameScreen(self.screen, self.state, self.ach).run()
         save.save_game(self.make_save_data())
+
+    def open_competition(self):
+        self.panel_open = False
+        self.left_panel_open = False
+        CompetitionUI(
+            self.screen,
+            self.cat,
+            self.state,
+            self.inventory,
+            self.competition,
+            self.enter_competition,
+            self.play_click_sound,
+        ).run()
+        save.save_game(self.make_save_data())
+
+    def enter_competition(self):
+        if not self.cat:
+            return {"ok": False, "message": "고양이가 없습니다.", "competition_data": self.competition}
+
+        day = max(1, safe_int(getattr(self.state, "day", 1), 1))
+        comp = competition.competition_for_day(day)
+        if not competition.is_event_day(day):
+            return {"ok": False, "message": "오늘은 대회 날이 아닙니다.", "competition_data": self.competition}
+        if competition.entered_today(self.competition, day):
+            return {"ok": False, "message": "오늘은 이미 참가했습니다.", "competition_data": self.competition}
+
+        fee = competition.entry_fee(comp, self.difficulty)
+        try:
+            money = max(0, int(self.state.money))
+        except (TypeError, ValueError):
+            money = 0
+        if money < fee:
+            return {"ok": False, "message": "참가비가 부족합니다.", "competition_data": self.competition}
+
+        self.state.money = money - fee
+        score = competition.roll_score(comp["id"], self.cat, self.state, self.inventory)
+        grade = competition.grade_for_score(score, self.difficulty)
+        reward = competition.reward_for_grade(comp, grade, self.difficulty)
+        self.state.money += reward
+        self.competition = competition.record_result(
+            self.competition,
+            day=day,
+            comp=comp,
+            grade=grade,
+            score=score,
+            reward=reward,
+        )
+
+        if self.ach:
+            self.ach.on_event("competition_entered", grade=grade)
+            if reward > 0:
+                self.ach.on_event("coins_earned", amount=reward)
+        save.save_game(self.make_save_data())
+        return {
+            "ok": True,
+            "message": f"{grade}등급! {score}점 / +{reward}코인",
+            "competition_data": self.competition,
+        }
 
     def open_bag(self):
         BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
@@ -934,6 +999,7 @@ class Game:
         actions = (
             self.open_settings,
             self.open_minigame,
+            self.open_competition,
             self.open_shop,
             self.open_bag,
             self.open_achievements,
