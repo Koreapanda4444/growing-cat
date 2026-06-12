@@ -48,7 +48,20 @@ ARROW_RECT = pygame.Rect(WIDTH - 34, 300, 24, 44)
 LEFT_ARROW_RECT = pygame.Rect(10, 300, 24, 44)
 
 MAIN_CAT_Y = 450
-NAME_Y_OFFSET = 1
+NAME_Y_OFFSET = 12
+CAT_AREA_WIDTH = 280
+CAT_AREA_TOP = 230
+CAT_AREA_BOTTOM = BOTTOM_BTN_Y - 20
+CAT_STAGE_MAX_SIZE = {
+    evolution.BABY: (150, 150),
+    evolution.ADULT: (225, 200),
+    evolution.LION: (230, 250),
+    evolution.DINO: (230, 250),
+}
+CAT_IMAGE_LAYOUT_OVERRIDES = {
+    "lion_cat1.png": {"offset": (-20, 0), "bottom": BOTTOM_BTN_Y - 5, "max_size": (200, 128)},
+    "lion_cat4.png": {"offset": (-10, 0), "bottom": BOTTOM_BTN_Y - 5, "max_size": (210, 135)},
+}
 
 CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
@@ -313,6 +326,9 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
+        self._cat_image_stage = None
+        self._cat_display_image = None
+        self._cat_display_body_rect = None
         self._cat_rect = None
         self._cat_click_count = 0
         if not hasattr(self.state, "minigame_used"):
@@ -421,6 +437,9 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
+        self._cat_image_stage = None
+        self._cat_display_image = None
+        self._cat_display_body_rect = None
         self._cat_rect = None
         self._cat_click_count = 0
         self.cat_dialogue_text = ""
@@ -557,6 +576,9 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self._cat_image_path = None
         self._cat_image = None
+        self._cat_image_stage = None
+        self._cat_display_image = None
+        self._cat_display_body_rect = None
         self._cat_rect = None
         self._cat_click_count = 0
         self.cat_dialogue_text = ""
@@ -611,7 +633,6 @@ class Game:
         SettingsScreen(
             self.screen,
             self.restart_game,
-            game=self,
             play_click_sound=self.play_click_sound,
         ).run()
 
@@ -845,6 +866,9 @@ class Game:
         if random.random() < CAT_IMAGE_ROTATE_CHANCE and self.cat.rotate_image():
             self._cat_image_path = None
             self._cat_image = None
+            self._cat_image_stage = None
+            self._cat_display_image = None
+            self._cat_display_body_rect = None
             save.save_game(self.make_save_data())
         return True
 
@@ -1215,22 +1239,123 @@ class Game:
             self._cat_rect = None
             return
 
-        if self._cat_image_path != self.cat.image_path:
+        cat_stage = getattr(self.cat, "stage", None)
+        if self._cat_image_path != self.cat.image_path or self._cat_image_stage != cat_stage:
             self._cat_image_path = self.cat.image_path
+            self._cat_image_stage = cat_stage
             self._cat_image = load_image(self.cat.image_path, alpha=True)
+            self._cat_display_image, self._cat_display_body_rect = self._prepare_cat_display_image(self._cat_image)
 
-        cat_img = self._cat_image
+        cat_img = self._cat_display_image
         if cat_img is None:
             self._cat_rect = None
             return
 
-        cat_rect = cat_img.get_rect(center=(WIDTH // 2, MAIN_CAT_Y))
+        cat_rect = self._cat_display_rect(cat_img)
         self._cat_rect = cat_rect
         self.screen.blit(cat_img, cat_rect)
 
         name_text = self.name_font.render(f"{self.cat.name} - {self.cat.stage}", True, (0, 0, 0))
         name_rect = name_text.get_rect(center=(WIDTH // 2, cat_rect.top - NAME_Y_OFFSET))
         self.screen.blit(name_text, name_rect)
+
+    def _prepare_cat_display_image(self, image):
+        if image is None:
+            return None, None
+
+        visible_rect = self._visible_alpha_rect(image)
+        if visible_rect.width > 0 and visible_rect.height > 0:
+            image = image.subsurface(visible_rect).copy()
+
+        body_rect = self._main_alpha_rect(image)
+        layout = self._cat_image_layout()
+        max_w, max_h = layout.get("max_size", CAT_STAGE_MAX_SIZE.get(getattr(self.cat, "stage", None), (220, 220)))
+        width, height = image.get_size()
+        if width <= 0 or height <= 0 or body_rect.width <= 0 or body_rect.height <= 0:
+            return None, None
+
+        area_h = layout.get("bottom", CAT_AREA_BOTTOM) - CAT_AREA_TOP
+        scale = min(
+            max_w / body_rect.width,
+            max_h / body_rect.height,
+            CAT_AREA_WIDTH / width,
+            area_h / height,
+            1.0,
+        )
+        if scale >= 1.0:
+            return image, body_rect
+
+        target_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+        display = pygame.transform.smoothscale(image, target_size)
+        display_body_rect = pygame.Rect(
+            int(round(body_rect.x * scale)),
+            int(round(body_rect.y * scale)),
+            max(1, int(round(body_rect.width * scale))),
+            max(1, int(round(body_rect.height * scale))),
+        )
+        return display, display_body_rect
+
+    def _main_alpha_rect(self, image):
+        fallback = image.get_bounding_rect(min_alpha=1)
+        mask = pygame.mask.from_surface(image, 8)
+        components = mask.connected_components()
+        if not components:
+            return fallback
+
+        component = max(components, key=lambda item: item.count())
+        rects = component.get_bounding_rects()
+        if not rects:
+            return fallback
+
+        main_rect = pygame.Rect(rects[0])
+        for rect in rects[1:]:
+            main_rect.union_ip(rect)
+        return main_rect
+
+    def _visible_alpha_rect(self, image):
+        fallback = image.get_bounding_rect(min_alpha=1)
+        mask = pygame.mask.from_surface(image, 8)
+        components = mask.connected_components()
+        rects = []
+        for component in components:
+            for rect in component.get_bounding_rects():
+                if rect.width > 0 and rect.height > 0:
+                    rects.append(pygame.Rect(rect))
+
+        if not rects:
+            return fallback
+
+        visible_rect = rects[0].copy()
+        for rect in rects[1:]:
+            visible_rect.union_ip(rect)
+        return visible_rect
+
+    def _cat_display_rect(self, cat_img):
+        layout = self._cat_image_layout()
+        area_bottom = layout.get("bottom", CAT_AREA_BOTTOM)
+        area = pygame.Rect((WIDTH - CAT_AREA_WIDTH) // 2, CAT_AREA_TOP, CAT_AREA_WIDTH, area_bottom - CAT_AREA_TOP)
+        rect = cat_img.get_rect()
+        body_rect = getattr(self, "_cat_display_body_rect", None)
+        if body_rect is None:
+            body_rect = rect.copy()
+
+        rect.x = int(round(area.centerx - body_rect.centerx))
+        rect.bottom = area.bottom
+        rect.move_ip(*layout.get("offset", (0, 0)))
+
+        if rect.top < area.top:
+            rect.top = area.top
+        if rect.bottom > area.bottom:
+            rect.bottom = area.bottom
+        if rect.left < area.left:
+            rect.left = area.left
+        if rect.right > area.right:
+            rect.right = area.right
+        return rect
+
+    def _cat_image_layout(self):
+        image_path = getattr(self.cat, "image_path", "") if self.cat else ""
+        return CAT_IMAGE_LAYOUT_OVERRIDES.get(os.path.basename(image_path), {})
 
     def _draw_arrow_button(self, rect, label):
         pygame.draw.rect(self.screen, (220, 220, 220), rect)
