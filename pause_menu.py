@@ -62,13 +62,15 @@ class PauseMenu:
         self.btn_resume = _Button(pygame.Rect(x, y0 + 0*(bh+gap), bw, bh), "계속하기", self.font_btn)
         self.btn_settings = _Button(pygame.Rect(x, y0 + 1*(bh+gap), bw, bh), "설정", self.font_btn)
         self.btn_photo = _Button(pygame.Rect(x, y0 + 2*(bh+gap), bw, bh), "사진찍기(F12)", self.font_btn)
-        self.btn_to_start = _Button(pygame.Rect(x, y0 + 3*(bh+gap), bw, bh), "시작 화면으로", self.font_btn)
-        self.btn_quit = _Button(pygame.Rect(x, y0 + 4*(bh+gap), bw, bh), "종료", self.font_btn)
+        self.btn_album = _Button(pygame.Rect(x, y0 + 3*(bh+gap), bw, bh), "앨범", self.font_btn)
+        self.btn_to_start = _Button(pygame.Rect(x, y0 + 4*(bh+gap), bw, bh), "시작 화면으로", self.font_btn)
+        self.btn_quit = _Button(pygame.Rect(x, y0 + 5*(bh+gap), bw, bh), "종료", self.font_btn)
 
         self.buttons = [
             ("resume", self.btn_resume),
             ("settings", self.btn_settings),
             ("photo", self.btn_photo),
+            ("album", self.btn_album),
             ("to_start", self.btn_to_start),
             ("quit", self.btn_quit),
         ]

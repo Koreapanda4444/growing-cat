@@ -7,6 +7,7 @@ import state
 from game import MiniGameScreen
 from shop import ShopUI
 from bag import BagUI
+from album import AlbumUI
 import save
 import evolution
 from config import asset_path, base_path
@@ -65,7 +66,7 @@ CAT_IMAGE_LAYOUT_OVERRIDES = {
 
 CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
-MENU_ACTION_LABELS = ("설정", "미니게임", "상점", "가방", "업적")
+MENU_ACTION_LABELS = ("설정", "미니게임", "상점", "가방", "업적", "앨범")
 CAT_IMAGE_ROTATE_CHANCE = 0.20
 
 CAT_CLICK_LINES = {
@@ -660,6 +661,11 @@ class Game:
         self.left_panel_open = False
         AchievementsUI(self.screen, self.ach, self.play_click_sound).run()
 
+    def open_album(self):
+        self.panel_open = False
+        self.left_panel_open = False
+        AlbumUI(self.screen, self.play_click_sound).run()
+
     def open_evolve_menu(self):
         if not self.cat:
             return
@@ -925,7 +931,14 @@ class Game:
             self.left_panel_open = False
             return True
 
-        actions = (self.open_settings, self.open_minigame, self.open_shop, self.open_bag, self.open_achievements)
+        actions = (
+            self.open_settings,
+            self.open_minigame,
+            self.open_shop,
+            self.open_bag,
+            self.open_achievements,
+            self.open_album,
+        )
         for index, action in enumerate(actions):
             if self._panel_button_rect(panel_x, index).collidepoint(pos):
                 self.play_click_sound()
@@ -987,6 +1000,8 @@ class Game:
             self.request_quit = True
         elif action == "photo":
             self._take_photo_toast()
+        elif action == "album":
+            self.open_album()
 
     def _handle_scene_key_event(self, event):
         if event.type != pygame.KEYDOWN:
@@ -1034,7 +1049,7 @@ class Game:
                     day=getattr(self.state, "day", None),
                     stage=getattr(self.cat, "stage", None),
                 )
-            self.toast_text = f"사진 저장됨: {os.path.basename(path)}"
+            self.toast_text = f"앨범 저장됨: {os.path.basename(path)}"
         except (OSError, TypeError, ValueError, pygame.error):
             self.toast_text = "사진 저장 실패"
         self.toast_timer = 2.5
