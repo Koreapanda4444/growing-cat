@@ -49,7 +49,6 @@ def _dpapi_protect(data: bytes) -> bytes:
     out_blob = _DATA_BLOB()
     entropy_blob, entropy_buf = _bytes_to_blob(_entropy())
 
-    # DATA_BLOB stores pointers; keep the backing buffers alive until DPAPI returns.
     ok = ctypes.windll.crypt32.CryptProtectData(
         ctypes.byref(in_blob),
         None,
@@ -95,7 +94,6 @@ def _dpapi_unprotect(data: bytes) -> bytes:
     out_blob = _DATA_BLOB()
     entropy_blob, entropy_buf = _bytes_to_blob(_entropy())
 
-    # DATA_BLOB stores pointers; keep the backing buffers alive until DPAPI returns.
     ok = ctypes.windll.crypt32.CryptUnprotectData(
         ctypes.byref(in_blob),
         None,

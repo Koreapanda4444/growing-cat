@@ -227,18 +227,11 @@ CAT_NEED_LINES = (
 )
 
 
-def safe_int(value, default=0):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+ACTION_KEYS = ("feed", "play", "clean", "sleep")
 
 
-def safe_stat(value, default=0):
-    try:
-        return state.clamp(float(value))
-    except (TypeError, ValueError):
-        return state.clamp(float(default))
+def new_action_usage():
+    return {key: False for key in ACTION_KEYS}
 
 
 class Game:
@@ -327,7 +320,7 @@ class Game:
         self.inventory = {}
         self.competition = competition.new_competition_data()
         self.scene = "MAIN"
-        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.actions_used = new_action_usage()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -346,7 +339,7 @@ class Game:
         if not isinstance(data, dict) or "cat" not in data:
             return
 
-        self.state.day = max(1, safe_int(data.get("day", 1), 1))
+        self.state.day = max(1, state.safe_int(data.get("day", 1), 1))
         saved_phase = data.get("time_phase", state.MORNING)
         self.state.time_phase = saved_phase if saved_phase in (state.MORNING, state.NIGHT) else state.MORNING
         self.difficulty = state.normalize_difficulty(data.get("difficulty", "normal"))
@@ -364,15 +357,12 @@ class Game:
             return
 
         self.cat = Cat(name, stage, difficulty=self.difficulty, personality=self.personality)
-        try:
-            self.cat.hunger = state.clamp(float(cat_data.get("hunger", 50)))
-            self.cat.tiredness = state.clamp(float(cat_data.get("tiredness", 20)))
-            self.cat.happiness = state.clamp(float(cat_data.get("happiness", 70)))
-            self.cat.cleanliness = state.clamp(float(cat_data.get("cleanliness", 60)))
-        except (TypeError, ValueError):
-            pass
+        self.cat.hunger = state.safe_stat(cat_data.get("hunger", 50), 50)
+        self.cat.tiredness = state.safe_stat(cat_data.get("tiredness", 20), 20)
+        self.cat.happiness = state.safe_stat(cat_data.get("happiness", 70), 70)
+        self.cat.cleanliness = state.safe_stat(cat_data.get("cleanliness", 60), 60)
 
-        self.state.money = max(0, safe_int(data.get("money", 0), 0))
+        self.state.money = max(0, state.safe_int(data.get("money", 0), 0))
         self.inventory = normalize_inventory(data.get("inventory", {}))
         self.state.minigame_used = state.normalize_minigame_usage(data.get("minigame_used"))
         self.competition = competition.normalize_competition_data(data.get("competition"))
@@ -440,7 +430,7 @@ class Game:
         self.cat = Cat(name, "아기고양이", difficulty=self.difficulty, personality=self.personality)
         self.inventory = {}
         self.competition = competition.new_competition_data()
-        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.actions_used = new_action_usage()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -467,7 +457,7 @@ class Game:
             self.cat.on_morning()
             self._grant_day_reward()
 
-        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.actions_used = new_action_usage()
         self.state.minigame_used = state.new_minigame_usage()
 
         evolved = phase == state.MORNING and self._try_auto_evolve()
@@ -580,7 +570,7 @@ class Game:
         self.ending_log = {}
         self.inventory = {}
         self.competition = competition.new_competition_data()
-        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.actions_used = new_action_usage()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -599,16 +589,16 @@ class Game:
         except (TypeError, ValueError):
             clean_inventory = {}
 
-        clean_money = max(0, safe_int(getattr(self.state, "money", 0), 0))
-        clean_day = max(1, safe_int(getattr(self.state, "day", 1), 1))
+        clean_money = max(0, state.safe_int(getattr(self.state, "money", 0), 0))
+        clean_day = max(1, state.safe_int(getattr(self.state, "day", 1), 1))
         clean_phase = getattr(self.state, "time_phase", state.MORNING)
         if clean_phase not in (state.MORNING, state.NIGHT):
             clean_phase = state.MORNING
         cat_stats = {
-            "hunger": safe_stat(getattr(self.cat, "hunger", 50), 50),
-            "tiredness": safe_stat(getattr(self.cat, "tiredness", 20), 20),
-            "happiness": safe_stat(getattr(self.cat, "happiness", 70), 70),
-            "cleanliness": safe_stat(getattr(self.cat, "cleanliness", 60), 60),
+            "hunger": state.safe_stat(getattr(self.cat, "hunger", 50), 50),
+            "tiredness": state.safe_stat(getattr(self.cat, "tiredness", 20), 20),
+            "happiness": state.safe_stat(getattr(self.cat, "happiness", 70), 70),
+            "cleanliness": state.safe_stat(getattr(self.cat, "cleanliness", 60), 60),
         }
 
         return {
@@ -677,7 +667,7 @@ class Game:
         if not self.cat:
             return {"ok": False, "message": "고양이가 없습니다.", "competition_data": self.competition}
 
-        day = max(1, safe_int(getattr(self.state, "day", 1), 1))
+        day = max(1, state.safe_int(getattr(self.state, "day", 1), 1))
         comp = competition.competition_for_day(day)
         if not competition.is_event_day(day):
             return {"ok": False, "message": "오늘은 대회 날이 아닙니다.", "competition_data": self.competition}
@@ -930,7 +920,7 @@ class Game:
             return False
 
         self.play_click_sound()
-        self._cat_click_count = max(0, safe_int(getattr(self, "_cat_click_count", 0), 0)) + 1
+        self._cat_click_count = max(0, state.safe_int(getattr(self, "_cat_click_count", 0), 0)) + 1
         self.cat_dialogue_text = self._cat_dialogue_line()
         self.cat_dialogue_timer = 2.2
 
@@ -1169,8 +1159,6 @@ class Game:
         panel_w, panel_h = 340, 260
         panel_x = WIDTH // 2 - panel_w // 2
         panel_y = 170
-        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-
         btn_w, btn_h = 130, 34
         evolve_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 56, btn_w, btn_h)
         close_rect = pygame.Rect(panel_x + panel_w - 30 - btn_w, panel_y + panel_h - 56, btn_w, btn_h)
@@ -1211,7 +1199,6 @@ class Game:
         panel_x = WIDTH // 2 - panel_w // 2
         panel_y = 180
         panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-
         panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         pygame.draw.rect(panel_surf, (245, 245, 245, 230), panel_surf.get_rect(), border_radius=12)
         self.screen.blit(panel_surf, (panel_x, panel_y))
@@ -1516,7 +1503,6 @@ class Game:
         panel_x = WIDTH // 2 - panel_w // 2
         panel_y = 170
         panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-
         panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         pygame.draw.rect(panel_surf, (245, 245, 245, 235), panel_surf.get_rect(), border_radius=12)
         self.screen.blit(panel_surf, (panel_x, panel_y))

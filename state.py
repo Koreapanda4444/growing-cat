@@ -1,3 +1,4 @@
+import math
 import random
 
 MORNING = "morning"
@@ -258,8 +259,25 @@ class GameState:
 MAX_STAT = 100
 
 
-def clamp(value):
+def safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return int(default)
+
+
+def clamp(value: float) -> float:
     return max(0, min(value, MAX_STAT))
+
+
+def safe_stat(value, default: float = 0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        number = float(default)
+    if not math.isfinite(number):
+        number = float(default)
+    return clamp(number)
 
 
 def rand_range(rng: tuple[int, int]) -> int:
@@ -277,11 +295,7 @@ def scaled_range(rng, difficulty: str | None, kind: str) -> tuple[int, int]:
 
 
 def scale_coin(amount: int, difficulty: str | None, source: str = "minigame") -> int:
-    try:
-        amount_int = int(amount)
-    except (TypeError, ValueError):
-        amount_int = 0
-    amount_int = max(0, amount_int)
+    amount_int = max(0, safe_int(amount))
 
     profile = get_difficulty_profile(difficulty)
     key = "day_coin" if source == "day" else "minigame_coin"

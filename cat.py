@@ -79,10 +79,8 @@ class Cat:
         return f"{self.name} - {self.stage}"
 
     def _get_personality_modifier(self, stat_type: str) -> float:
-        """성격에 따른 스탯 변화 배율 반환"""
         prof = state.get_personality_profile(self.personality)
-        
-        # 프로필에서 해당 stat_type의 배율 가져오기
+
         if stat_type in prof:
             return prof[stat_type]
         return 1.0
