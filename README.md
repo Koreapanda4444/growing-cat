@@ -59,6 +59,9 @@ python app.py
 python -B -m unittest discover -s tests -v
 ```
 
+핵심 로직 검토 결과와 아직 구현하지 않은 기능 후보는
+[`CODE_REVIEW.md`](CODE_REVIEW.md)에 정리되어 있습니다.
+
 ## 저장 데이터
 
 저장 파일은 `%APPDATA%/growing-cat/save.dat`에 생성됩니다. 저장 파일은 HMAC으로 서명되며, Windows에서는 키를 DPAPI로 보호합니다. 저장 파일 무결성 검증에 실패하면 기존 저장을 덮어쓰지 않고 시작 화면으로 진입합니다.
