@@ -20,6 +20,9 @@ class SettingsScreen:
         self.font = load_font(FONT_PATH, 18)
         self.big_font = load_font(FONT_PATH, 22)
         self.message = ""
+        self.confirm_reset = False
+        self.confirm_rect = pygame.Rect(55, 330, 135, 38)
+        self.cancel_rect = pygame.Rect(210, 330, 135, 38)
 
         self.reset_rect = pygame.Rect(100, 285, 200, 38)
         self.back_rect = pygame.Rect(100, 335, 200, 36)
@@ -38,14 +41,26 @@ class SettingsScreen:
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    self.running = False
+                    if self.confirm_reset:
+                        self.confirm_reset = False
+                    else:
+                        self.running = False
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if self.reset_rect.collidepoint(event.pos):
+                if not self.confirm_reset and self.reset_rect.collidepoint(event.pos):
+                    self._click()
+                    self.confirm_reset = True
+                    self.message = ""
+
+                elif self.confirm_reset and self.confirm_rect.collidepoint(event.pos):
                     self._click()
                     self.reset_data()
 
-                elif self.back_rect.collidepoint(event.pos):
+                elif self.confirm_reset and self.cancel_rect.collidepoint(event.pos):
+                    self._click()
+                    self.confirm_reset = False
+
+                elif not self.confirm_reset and self.back_rect.collidepoint(event.pos):
                     self._click()
                     self.running = False
 
@@ -79,8 +94,14 @@ class SettingsScreen:
         title = self.big_font.render("설정", True, (0, 0, 0))
         self.screen.blit(title, title.get_rect(center=(WIDTH // 2, 245)))
 
-        self.draw_button(self.reset_rect, "데이터 초기화")
-        self.draw_button(self.back_rect, "뒤로가기")
+        if self.confirm_reset:
+            warning = self.font.render("저장 및 업적 기록을 지울까요?", True, (140, 40, 40))
+            self.screen.blit(warning, warning.get_rect(center=(WIDTH // 2, 290)))
+            self.draw_button(self.confirm_rect, "초기화")
+            self.draw_button(self.cancel_rect, "취소")
+        else:
+            self.draw_button(self.reset_rect, "데이터 초기화")
+            self.draw_button(self.back_rect, "뒤로가기")
         if self.message:
             msg = self.font.render(self.message, True, (160, 40, 40))
             self.screen.blit(msg, msg.get_rect(center=(WIDTH // 2, 390)))

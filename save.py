@@ -240,6 +240,9 @@ def reset_save():
             os.remove(_LEGACY_APPDATA_JSON)
         if os.path.exists(_LEGACY_CWD_JSON):
             os.remove(_LEGACY_CWD_JSON)
+        achievement_path = _DATA_DIR / "achievements_save.json"
+        if achievement_path.exists():
+            achievement_path.unlink()
         return True
     except (OSError, IOError) as e:
         print(f"초기화 실패: {e}")
