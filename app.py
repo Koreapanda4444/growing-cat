@@ -375,6 +375,13 @@ class Game:
         self.state.money = max(0, safe_int(data.get("money", 0), 0))
         self.inventory = normalize_inventory(data.get("inventory", {}))
         self.state.minigame_used = state.normalize_minigame_usage(data.get("minigame_used"))
+        usage = data.get("care_usage")
+        if (isinstance(usage, dict) and usage.get("day") == self.state.day
+                and usage.get("phase") == self.state.time_phase
+                and isinstance(usage.get("used"), dict)):
+            self.actions_used = {key: bool(usage["used"].get(key, False)) for key in CARE_ACTION_KEYS}
+        else:
+            self.actions_used = {key: False for key in CARE_ACTION_KEYS}
         self.competition = competition.normalize_competition_data(data.get("competition"))
         self.scene = "MAIN"
 
@@ -621,6 +628,11 @@ class Game:
             "money": clean_money,
             "inventory": clean_inventory,
             "minigame_used": state.normalize_minigame_usage(getattr(self.state, "minigame_used", None)),
+            "care_usage": {
+                "day": clean_day,
+                "phase": clean_phase,
+                "used": {key: bool(self.actions_used.get(key, False)) for key in CARE_ACTION_KEYS},
+            },
             "competition": competition.copy_for_save(getattr(self, "competition", None)),
             "cat": {
                 "name": self.cat.name,
