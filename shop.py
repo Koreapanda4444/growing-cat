@@ -34,6 +34,10 @@ class ShopUI:
         self._apply_difficulty_prices()
 
         self.item_rects = []
+        self.page = 0
+        self.prev_rect = pygame.Rect(65, 520, 95, 34)
+        self.next_rect = pygame.Rect(240, 520, 95, 34)
+        self.message = ''
 
     def _apply_difficulty_prices(self):
         for category in self.items.values():
@@ -56,7 +60,17 @@ class ShopUI:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
 
+            elif event.type == pygame.MOUSEWHEEL:
+                self.change_page(-event.y)
+            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                self.change_page(-1 if event.key == pygame.K_LEFT else 1)
             elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.prev_rect.collidepoint(event.pos):
+                    self.change_page(-1)
+                    return
+                if self.next_rect.collidepoint(event.pos):
+                    self.change_page(1)
+                    return
                 if self.close_rect.collidepoint(event.pos):
                     if self.play_click_sound:
                         self.play_click_sound()
@@ -67,14 +81,17 @@ class ShopUI:
                     if self.play_click_sound:
                         self.play_click_sound()
                     self.active_tab = "FOOD"
+                    self.page = 0
                 elif self.tab_toy.collidepoint(event.pos):
                     if self.play_click_sound:
                         self.play_click_sound()
                     self.active_tab = "TOY"
+                    self.page = 0
                 elif self.tab_evolution.collidepoint(event.pos):
                     if self.play_click_sound:
                         self.play_click_sound()
                     self.active_tab = "EVOLUTION"
+                    self.page = 0
 
                 for rect, item in self.item_rects:
                     if rect.collidepoint(event.pos):
@@ -84,6 +101,33 @@ class ShopUI:
                             ok = self.on_buy(item)
                             if ok:
                                 self.coin -= item["price"]
+                                self.message = "구매 완료"
+                            else:
+                                self.message = "구매 실패"
+                        else:
+                            self.message = "코인 부족"
+                        return
+
+    def item_count(self):
+        return len(self.items[self.active_tab])
+
+    def change_page(self, delta):
+        last = max(0, (self.item_count() - 1) // 4)
+        self.page = max(0, min(last, self.page + delta))
+
+    def draw_pagination(self):
+        self.change_page(0)
+        for rect, label in ((self.prev_rect, "이전"), (self.next_rect, "다음")):
+            pygame.draw.rect(self.screen, PANEL_COLOR, rect)
+            pygame.draw.rect(self.screen, BORDER, rect, 1)
+            caption = self.font.render(label, True, BORDER)
+            self.screen.blit(caption, caption.get_rect(center=rect.center))
+        pages = max(1, (self.item_count() + 3) // 4)
+        page_text = self.font.render(f"{self.page + 1}/{pages}", True, BORDER)
+        self.screen.blit(page_text, page_text.get_rect(center=(200, 537)))
+        if self.message:
+            feedback = self.font.render(self.message, True, (40, 90, 60))
+            self.screen.blit(feedback, feedback.get_rect(center=(200, 575)))
 
     def draw_top(self):
         face_rect = pygame.Rect(20, 10, 60, 60)
@@ -116,7 +160,7 @@ class ShopUI:
 
     def draw_items(self):
         self.item_rects.clear()
-        items = self.items[self.active_tab]
+        items = self.items[self.active_tab][self.page * 4:(self.page + 1) * 4]
 
         start_x = 40
         start_y = 150
@@ -148,4 +192,5 @@ class ShopUI:
         self.draw_top()
         self.draw_tabs()
         self.draw_items()
+        self.draw_pagination()
         pygame.display.flip()
