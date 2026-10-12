@@ -364,6 +364,13 @@ class Game:
             return
 
         self.cat = Cat(name, stage, difficulty=self.difficulty, personality=self.personality)
+        saved_image = cat_data.get("image")
+        if isinstance(saved_image, str):
+            available = self.cat.available_images()
+            candidates = {Path(path).name: path for path in available}
+            image_name = saved_image.replace(chr(92), "/").split("/")[-1]
+            if saved_image.replace(chr(92), "/").startswith("cats/") and image_name in candidates:
+                self.cat.image_path = candidates[image_name]
         try:
             self.cat.hunger = state.clamp(float(cat_data.get("hunger", 50)))
             self.cat.tiredness = state.clamp(float(cat_data.get("tiredness", 20)))
@@ -637,6 +644,11 @@ class Game:
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
+                "image": (
+                    f"cats/{Path(self.cat.image_path).parent.name}/{Path(self.cat.image_path).name}"
+                    if self.cat.image_path and Path(self.cat.image_path).parent.name in ("baby", "adult", "lion", "dino")
+                    else None
+                ),
                 **cat_stats,
             }
         }
