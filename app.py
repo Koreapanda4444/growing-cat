@@ -15,6 +15,7 @@ import evolution
 import competition
 import daily_events
 import daily_missions
+import minigame_records
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
@@ -409,6 +410,7 @@ class Game:
         self.state.money = max(0, safe_int(data.get("money", 0), 0))
         self.inventory = normalize_inventory(data.get("inventory", {}))
         self.state.minigame_used = state.normalize_minigame_usage(data.get("minigame_used"))
+        self.state.minigame_records = minigame_records.normalize(data.get("minigame_records"))
         usage = data.get("care_usage")
         if (isinstance(usage, dict) and usage.get("day") == self.state.day
                 and usage.get("phase") == self.state.time_phase
@@ -709,6 +711,7 @@ class Game:
             "money": clean_money,
             "inventory": clean_inventory,
             "minigame_used": state.normalize_minigame_usage(getattr(self.state, "minigame_used", None)),
+            "minigame_records": minigame_records.normalize(self.state.minigame_records),
             "care_usage": {
                 "day": clean_day,
                 "phase": clean_phase,

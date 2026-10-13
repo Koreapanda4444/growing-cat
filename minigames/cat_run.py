@@ -208,7 +208,7 @@ class CatRunGame:
     def get_reward(self):
         distance_int = int(self.distance)
         coin_reward = (distance_int // 100) * 10
-        return {"distance": distance_int, "coins": 0 if self.cancelled else coin_reward,
+        return {"distance": distance_int, "obstacles": self.score, "coins": 0 if self.cancelled else coin_reward,
                 "cancelled": self.cancelled, "quit_requested": self.quit_requested}
 
     def _compute_next_spawn_frames(self):

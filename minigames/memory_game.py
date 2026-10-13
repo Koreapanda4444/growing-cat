@@ -227,6 +227,9 @@ class MemoryGame:
 
         self._set_mismatch_timer(0)
         pygame.event.clear(MISMATCH_EVENT)
-        return {"won": bool(self.won) and not self.cancelled,
+        pairs = sum(card["matched"] for card in self.cards) // 2
+        elapsed = max(0, pygame.time.get_ticks() - self.limit_start_ms) if self.limit_start_ms is not None else 0
+        return {"pairs": pairs, "errors": self.fail_count, "score": max(0, pairs * 100 - self.fail_count * 10),
+                "elapsed_ms": elapsed, "won": bool(self.won) and not self.cancelled,
                 "coins": 0 if self.cancelled else int(self.reward_coins),
                 "cancelled": self.cancelled, "quit_requested": self.quit_requested}

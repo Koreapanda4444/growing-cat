@@ -112,6 +112,13 @@ def _draw_result(screen, fonts, screen_w, screen_h, won, score):
     screen.blit(hint, hint.get_rect(center=(screen_w // 2, int(screen_h * 0.66))))
 
 
+def _build_result(won, score, best_combo, hits, misses, *, cancelled=False, quit_requested=False):
+    return {"won": won and not cancelled, "score": score, "best_combo": best_combo,
+            "hits": hits, "misses": misses, "accuracy": round(hits * 100 / (hits + misses)) if hits + misses else 0,
+            "coins": 0 if cancelled else _coins_from_score(score, won),
+            "cancelled": cancelled, "quit_requested": quit_requested}
+
+
 def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "normal") -> dict:
     if not pygame.font.get_init():
         pygame.font.init()
@@ -147,6 +154,8 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
     score = 0
     combo = 0
     best_combo = 0
+    hits = 0
+    misses = 0
     time_left = TIME_LIMIT
 
     combo_timer = 0.0
@@ -167,9 +176,7 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
 
         for event in screen_events():
             if event.type == pygame.QUIT:
-                return {"won": won, "score": score,
-                        "coins": _coins_from_score(score, won) if phase == "RESULT" else 0,
-                        "cancelled": phase != "RESULT", "quit_requested": True}
+                return _build_result(won, score, best_combo, hits, misses, cancelled=phase != "RESULT", quit_requested=True)
 
             if phase == "RESULT":
                 if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
@@ -178,7 +185,7 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
                 continue
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return {"won": False, "score": score, "coins": 0, "cancelled": True}
+                return _build_result(False, score, best_combo, hits, misses, cancelled=True)
 
             if phase == "PLAY":
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -188,6 +195,7 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
                     hit = (dx * dx + dy * dy) <= (radius * radius)
 
                     if hit:
+                        hits += 1
                         if combo_timer > 0:
                             combo += 1
                         else:
@@ -216,6 +224,7 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
                         vy = math.sin(ang) * speed
 
                     else:
+                        misses += 1
                         if MISS_PENALTY > 0:
                             score = max(0, score - MISS_PENALTY)
                         combo_timer = 0.0
@@ -276,5 +285,4 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
 
         pygame.display.flip()
 
-    coins = _coins_from_score(score, won)
-    return {"won": won, "score": score, "coins": coins}
+    return _build_result(won, score, best_combo, hits, misses)

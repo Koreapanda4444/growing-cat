@@ -134,7 +134,9 @@ class CatFollowGame:
                 self._draw(w, h, tile, gx, gy, ui_offset_y)
 
         coins = self._coins_from(self.cats_correct, self.rounds_cleared)
-        return {"won": bool(self.won) and not self.cancelled, "score": 0,
+        return {"won": bool(self.won) and not self.cancelled, "score": self.cats_correct,
+                "rounds": self.rounds_cleared,
+                "sequence_length": self._sequence_length_for_round(self.rounds_cleared) if self.rounds_cleared else 0,
                 "coins": 0 if self.cancelled else int(coins),
                 "cancelled": self.cancelled, "quit_requested": self.quit_requested}
 

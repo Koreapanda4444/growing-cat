@@ -1,5 +1,6 @@
 import pygame
 import state as game_state
+import minigame_records
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 from minigames.cat_follow import CatFollowGame
@@ -28,6 +29,9 @@ class MiniGameScreen:
         self.hint_font = load_font(FONT_PATH, 13)
 
         self.selected = None
+        self.view = "LIST"
+        self._result_applied = False
+        self.btn_records = pygame.Rect(232, 52, 150, 32)
 
         self.btn_close = pygame.Rect(350, 10, 36, 36)
         self.card_avoid = pygame.Rect(40, 120, 320, 90)
@@ -48,7 +52,10 @@ class MiniGameScreen:
             if event.type == pygame.QUIT:
                 raise GameQuit
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.running = False
+                if self.view == "RECORDS":
+                    self.view = "LIST"
+                else:
+                    self.running = False
                 return
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.handle_click(event.pos)
@@ -58,6 +65,12 @@ class MiniGameScreen:
     def handle_click(self, pos):
         if self.btn_close.collidepoint(pos):
             self.running = False
+            return
+
+        if self.btn_records.collidepoint(pos):
+            self.view = "LIST" if self.view == "RECORDS" else "RECORDS"
+            return
+        if self.view == "RECORDS":
             return
 
         if self.card_avoid.collidepoint(pos):
@@ -86,6 +99,7 @@ class MiniGameScreen:
         if self.state.minigame_used.get(self.selected):
             return
 
+        self._result_applied = False
         self.state.minigame_used[self.selected] = True
         if self.on_save and self.on_save() is False:
             self.state.minigame_used[self.selected] = False
@@ -120,8 +134,10 @@ class MiniGameScreen:
         return None
 
     def _apply_minigame_result(self, result, *, win_on_positive_coins=False):
-        if not isinstance(result, dict) or result.get("cancelled"):
+        if (self._result_applied or self.selected not in minigame_records.GAME_NAMES
+                or not isinstance(result, dict) or result.get("cancelled")):
             return
+        self._result_applied = True
 
         if self.on_activity:
             self.on_activity("minigame")
@@ -136,6 +152,9 @@ class MiniGameScreen:
         won = bool(result.get("won")) or (win_on_positive_coins and coins > 0)
         if self.ach and won:
             self.ach.on_event("minigame_won")
+        self.state.minigame_records = minigame_records.record_result(
+            getattr(self.state, "minigame_records", None), self.selected, result, won, self.state.difficulty
+        )
 
     def _scaled_result_coins(self, result):
         try:
@@ -163,10 +182,21 @@ class MiniGameScreen:
         txt = self.font.render(title, True, (0, 0, 0))
         self.screen.blit(txt, (rect.x + 20, rect.y + 20))
 
+    def draw_records(self):
+        data = minigame_records.normalize(getattr(self.state, "minigame_records", None))
+        for index, (key, name) in enumerate(minigame_records.GAME_NAMES.items()):
+            rect = pygame.Rect(20, 120 + index * 100, 360, 90)
+            pygame.draw.rect(self.screen, (225, 230, 225), rect)
+            pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+            entry = data[key]
+            self.screen.blit(self.font.render(name, True, (0, 0, 0)), (rect.x + 12, rect.y + 8))
+            self.screen.blit(self.hint_font.render(f"완료 {entry['plays']}회 / 성공 {entry['wins']}회", True, (65, 65, 65)), (rect.x + 12, rect.y + 35))
+            self.screen.blit(self.hint_font.render(minigame_records.best_summary(key, entry), True, (65, 65, 65)), (rect.x + 12, rect.y + 56))
+
     def draw(self):
         self.screen.fill((235, 235, 235))
 
-        self.screen.blit(self.big_font.render("미니게임", True, (0, 0, 0)), (20, 20))
+        self.screen.blit(self.big_font.render("미니게임 기록" if self.view == "RECORDS" else "미니게임", True, (0, 0, 0)), (20, 20))
         difficulty = getattr(self.state, "difficulty", "normal") if self.state else "normal"
         difficulty_label = game_state.get_difficulty_label(difficulty)
         self.screen.blit(self.font.render(f"난이도: {difficulty_label}", True, (70, 70, 70)), (20, 54))
@@ -175,6 +205,15 @@ class MiniGameScreen:
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_close, 1)
         close_text = self.font.render("X", True, (0, 0, 0))
         self.screen.blit(close_text, close_text.get_rect(center=self.btn_close.center))
+
+        pygame.draw.rect(self.screen, (215, 225, 215), self.btn_records)
+        pygame.draw.rect(self.screen, (0, 0, 0), self.btn_records, 1)
+        label = self.font.render("게임 선택" if self.view == "RECORDS" else "기록 보기", True, (0, 0, 0))
+        self.screen.blit(label, label.get_rect(center=self.btn_records.center))
+        if self.view == "RECORDS":
+            self.draw_records()
+            pygame.display.flip()
+            return
 
         used_jump = getattr(self.state, "minigame_used", {}).get("jump", False) if self.state else False
         used_memory = getattr(self.state, "minigame_used", {}).get("memory", False) if self.state else False
