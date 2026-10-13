@@ -859,8 +859,9 @@ class Game:
     def _event_choice_rect(self, index):
         return pygame.Rect(35, 330 + index * 52, 330, 42)
 
-    def _daily_result_text(self):
-        result = self.daily_events.get("result") or {}
+    def _daily_result_text(self, result=None):
+        if result is None:
+            result = self.daily_events.get("result") or {}
         names = {"hunger": "배고픔", "tiredness": "피로", "happiness": "행복", "cleanliness": "청결"}
         parts = [f"{names[key]} {value:+g}" for key, value in result.get("stats", {}).items() if value]
         if result.get("coins"):
@@ -885,9 +886,12 @@ class Game:
 
     def handle_click_daily_content(self, pos):
         if self.scene == "EVENT":
-            if self._event_choice_rect(0).collidepoint(pos):
-                self.resolve_daily_event()
-            elif pygame.Rect(100, 490, 200, 30).collidepoint(pos):
+            event = daily_events.EVENTS.get(self.daily_events["event"])
+            for index in range(len(event["choices"]) if event else 0):
+                if self._event_choice_rect(index).collidepoint(pos):
+                    self.resolve_daily_event(index)
+                    return
+            if pygame.Rect(100, 490, 200, 30).collidepoint(pos):
                 self.scene = "MAIN"
         elif pygame.Rect(120, 530, 160, 34).collidepoint(pos):
             self.scene = "MAIN"
@@ -1365,8 +1369,8 @@ class Game:
                 self.restart_game()
                 return True
 
-        if self.scene == "EVENT" and event.key in (pygame.K_RETURN, pygame.K_1):
-            self.resolve_daily_event()
+        if self.scene == "EVENT" and event.key in (pygame.K_RETURN, pygame.K_1, pygame.K_2, pygame.K_3):
+            self.resolve_daily_event(0 if event.key == pygame.K_RETURN else event.key - pygame.K_1)
             return True
 
         if self.scene == "SPECIAL_CARE" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
@@ -1914,7 +1918,14 @@ class Game:
             for line in event["text"]:
                 y = self._draw_wrapped_text(line, (35, y), 330)
             self._draw_wrapped_text("하루 한 번 발생 / 확인한 결과는 저장됩니다.", (35, 275), 330)
-            self.draw_button(self._event_choice_rect(0), "함께하기 (Enter)", self.panel_font)
+            for index, choice in enumerate(event["choices"]):
+                rect = self._event_choice_rect(index)
+                pygame.draw.rect(self.screen, (220, 225, 215), rect, border_radius=5)
+                pygame.draw.rect(self.screen, (60, 60, 60), rect, 1, border_radius=5)
+                label = self.panel_font.render(f"{index + 1}. {choice['label']}", True, (30, 30, 30))
+                self.screen.blit(label, (rect.x + 7, rect.y + 4))
+                result = daily_events.preview_choice(self.daily_events["event"], index, self.cat, self.state, self.inventory)
+                self._draw_wrapped_text(self._daily_result_text(result), (rect.x + 7, rect.y + 24), 316, font=self.stat_font)
             self.draw_button(pygame.Rect(100, 490, 200, 30), "나중에 (ESC)", self.panel_font)
             return
         self.screen.blit(self.big_font.render("오늘의 이벤트", True, (30, 30, 30)), (20, 80))
@@ -1923,7 +1934,9 @@ class Game:
             self._draw_wrapped_text("아직 선택하지 않은 이야기가 있습니다.", (20, 158), 360)
             self.draw_button(pygame.Rect(240, 205, 130, 32), "이벤트 보기", self.panel_font)
         elif event:
-            self._draw_wrapped_text(self._daily_result_text(), (20, 158), 360)
+            result = self.daily_events.get("result") or {}
+            y = self._draw_wrapped_text(result.get("message", "선택한 결과가 기록되었습니다."), (20, 158), 360)
+            self._draw_wrapped_text(self._daily_result_text(), (20, y), 360)
         self.draw_button(pygame.Rect(120, 530, 160, 34), "닫기 (ESC)", self.panel_font)
 
     def draw_special_care(self):
