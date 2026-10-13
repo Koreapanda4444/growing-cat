@@ -17,6 +17,7 @@ import daily_events
 import daily_missions
 import minigame_records
 import minigame_challenges
+import growth_records
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
@@ -439,6 +440,7 @@ class Game:
         self.daily_missions = daily_missions.for_day(saved_missions, self.state)
         missions_created = saved_missions != self.daily_missions
         self._sync_achievements()
+        self.state.growth_records = growth_records.normalize(data.get("growth_records"), self.state.day)
         self.scene = "MAIN"
         self.check_game_over()
         if not self.game_over_reason:
@@ -458,6 +460,7 @@ class Game:
             self.ach.check_progress(self.state, self.cat, self.competition, self.daily_events, self.daily_missions)
 
     def _save_progress(self):
+        growth_records.sync(self.state, self.cat)
         saved = save.save_game(self.make_save_data())
         if saved:
             self._sync_achievements()
@@ -588,6 +591,7 @@ class Game:
     def _grant_day_reward(self):
         day_reward = state.get_day_coin_reward(self.difficulty)
         self.state.money = max(0, int(self.state.money + day_reward))
+        growth_records.earn(self.state, day_reward)
 
         if not self.ach:
             return
@@ -728,6 +732,7 @@ class Game:
             "minigame_used": state.normalize_minigame_usage(getattr(self.state, "minigame_used", None)),
             "minigame_records": minigame_records.normalize(self.state.minigame_records),
             "minigame_challenges": minigame_challenges.normalize(self.state.minigame_challenges),
+            "growth_records": growth_records.normalize(self.state.growth_records, clean_day),
             "care_usage": {
                 "day": clean_day,
                 "phase": clean_phase,
@@ -816,6 +821,7 @@ class Game:
             return {"ok": False, "message": "참가비가 부족합니다.", "competition_data": self.competition}
 
         competition_before = competition.copy_for_save(self.competition)
+        growth_before = growth_records.normalize(self.state.growth_records, day)
         self.state.money = money - fee
         score = competition.roll_score(comp["id"], self.cat, self.state, self.inventory)
         grade = competition.grade_for_score(score, self.difficulty)
@@ -832,7 +838,9 @@ class Game:
 
         self.competition, promotion_reward, promoted = competition.claim_promotions(self.competition)
         self.state.money += promotion_reward
+        growth_records.earn(self.state, reward + promotion_reward)
         if not self._save_progress():
+            self.state.growth_records = growth_before
             self.competition = competition_before
             self.state.money = money
             return {"ok": False, "message": "저장 실패. 다시 참가해 주세요.", "competition_data": self.competition}
@@ -861,6 +869,7 @@ class Game:
         AlbumUI(self.screen, self.play_click_sound).run()
 
     def _record_daily_activity(self, activity):
+        growth_records.add_activity(self.state, activity)
         self.daily_missions, changed = daily_missions.record(self.daily_missions, activity)
         if changed and daily_missions.completed(self.daily_missions):
             self.toast_text = "오늘의 일일 목표를 모두 달성했습니다!"
@@ -870,6 +879,7 @@ class Game:
     def claim_daily_mission(self, index):
         if self.scene != "DAILY" or not self.cat or self.cat.check_game_over():
             return False
+        growth_before = growth_records.normalize(self.state.growth_records, self.state.day)
         before = daily_missions.normalize(self.daily_missions)
         money_before = self.state.money
         inventory_before = dict(self.inventory)
@@ -877,7 +887,9 @@ class Game:
         if reward is None:
             return False
         self.daily_missions = data
+        growth_records.earn(self.state, reward["coins"])
         if not self._save_progress():
+            self.state.growth_records = growth_before
             self.daily_missions = before
             self.state.money = money_before
             self.inventory.clear()
@@ -904,6 +916,11 @@ class Game:
         if self.daily_events["status"] == "pending" and not self.game_over_reason:
             self.scene = "EVENT"
 
+    def open_growth_records(self):
+        growth_records.GrowthRecordsUI(self.screen, self.state, self.cat, self.competition,
+                                       self.daily_events, self.daily_missions).run()
+        self._discard_events = True
+
     def open_daily_content(self):
         self.panel_open = False
         self.left_panel_open = False
@@ -917,6 +934,7 @@ class Game:
             return False
         self.daily_events = data
         result = data["result"]
+        growth_records.earn(self.state, max(0, result["coins"]))
         if result["coins"] > 0 and self.ach:
             self.ach.on_event("coins_earned", amount=result["coins"])
         self.toast_text = "이벤트 결과가 오늘의 활동에 기록되었습니다."
@@ -963,7 +981,9 @@ class Game:
                     return
             if pygame.Rect(100, 490, 200, 30).collidepoint(pos):
                 self.scene = "MAIN"
-        elif pygame.Rect(120, 530, 160, 34).collidepoint(pos):
+        elif pygame.Rect(210, 530, 155, 34).collidepoint(pos):
+            self.open_growth_records()
+        elif pygame.Rect(35, 530, 155, 34).collidepoint(pos):
             self.scene = "MAIN"
         elif self.daily_events["status"] == "pending" and pygame.Rect(240, 205, 130, 32).collidepoint(pos):
             self.scene = "EVENT"
@@ -2025,7 +2045,8 @@ class Game:
             y = self._draw_wrapped_text(result.get("message", "선택한 결과가 기록되었습니다."), (20, 158), 360)
             self._draw_wrapped_text(self._daily_result_text(), (20, y), 360)
         self._draw_daily_missions()
-        self.draw_button(pygame.Rect(120, 530, 160, 34), "닫기 (ESC)", self.panel_font)
+        self.draw_button(pygame.Rect(35, 530, 155, 34), "닫기 (ESC)", self.panel_font)
+        self.draw_button(pygame.Rect(210, 530, 155, 34), "육성 기록", self.panel_font)
 
     def _daily_mission_rect(self, index):
         return pygame.Rect(20, 292 + index * 64, 360, 56)

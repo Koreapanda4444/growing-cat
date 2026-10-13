@@ -2,6 +2,7 @@ import pygame
 import state as game_state
 import minigame_records
 import minigame_challenges
+import growth_records
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 from minigames.cat_follow import CatFollowGame
@@ -212,12 +213,15 @@ class MiniGameScreen:
         goal = minigame_challenges.definitions(key, self.state.difficulty)[index]
         before = minigame_challenges.normalize(self.state.minigame_challenges)
         money = self.state.money
+        growth_before = growth_records.normalize(self.state.growth_records, self.state.day)
         inventory = dict(self.inventory)
         data, reward = minigame_challenges.claim(before, goal["id"], self.state, self.inventory)
         if reward is None:
             return False
         self.state.minigame_challenges = data
+        growth_records.earn(self.state, reward["coins"])
         if self.on_save and self.on_save() is False:
+            self.state.growth_records = growth_before
             self.state.minigame_challenges = before
             self.state.money = money
             self.inventory.clear()
@@ -247,6 +251,7 @@ class MiniGameScreen:
         except (TypeError, ValueError):
             current = 0
         self.state.money = current + max(0, int(coins))
+        growth_records.earn(self.state, coins)
 
     def draw_card(self, rect, title, selected=False, disabled=False):
         color = (220, 220, 220)
