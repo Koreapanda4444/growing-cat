@@ -13,7 +13,7 @@ PERSONALITY_LAZY = "lazy"
 
 CARE_LABELS = {"feed": "밥", "play": "놀기", "clean": "씻기", "sleep": "잠자기"}
 
-MINIGAME_KEYS = ("jump", "memory", "footsteps", "laser")
+MINIGAME_KEYS = ("jump", "memory", "footsteps", "laser", "timing")
 
 DIFFICULTY_PROFILE = {
     DIFFICULTY_EASY: {
@@ -161,6 +161,16 @@ MINIGAME_DIFFICULTY_PROFILE = {
         },
     },
 }
+
+for level, speed, width, target, challenge_target, seconds in (
+    ("easy", 0.65, 0.26, 70, 120, 6),
+    ("normal", 0.90, 0.20, 80, 135, 5),
+    ("hard", 1.15, 0.14, 90, 150, 4),
+):
+    MINIGAME_DIFFICULTY_PROFILE[level]["timing"] = {
+        "speed": speed, "width": width, "target_score": target,
+        "challenge_score": challenge_target, "round_seconds": seconds,
+    }
 
 PERSONALITY_PROFILE = {
     PERSONALITY_ENERGETIC: {

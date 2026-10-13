@@ -203,7 +203,7 @@ def roll_score(comp_id: str, cat, state, inventory) -> int:
 def _score(comp_id: str, cat, state, inventory, random_bonus: int = 0) -> int:
     stats = _stats(cat)
     stage = getattr(cat, "stage", "")
-    minigame_count = sum(1 for used in getattr(state, "minigame_used", {}).values() if used)
+    minigame_count = min(4, sum(1 for used in getattr(state, "minigame_used", {}).values() if used))
     food_count = _inventory_count(inventory, ("사료", "생선", "츄르", "고기"))
     toy_count = _inventory_count(inventory, ("강아지풀", "낚싯대", "실"))
 

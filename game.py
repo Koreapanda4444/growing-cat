@@ -5,11 +5,12 @@ from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 from minigames.cat_follow import CatFollowGame
 from minigames.laser_chase import run_laser_chase
+from minigames.timing_game import TimingGame
 
 from config import asset_path
 from pg_utils import screen_events, GameQuit, load_font
 
-CHALLENGE_GAMES = {"jump", "memory", "footsteps", "laser"}
+CHALLENGE_GAMES = {"jump", "memory", "footsteps", "laser", "timing"}
 
 FPS = 60    
 
@@ -30,6 +31,9 @@ class MiniGameScreen:
         self.big_font = load_font(FONT_PATH, 22)
         self.hint_font = load_font(FONT_PATH, 13)
 
+        self.page = 0
+        self.prev_rect = pygame.Rect(20, 525, 76, 32)
+        self.next_rect = pygame.Rect(105, 525, 76, 32)
         self.selected = None
         self.view = "LIST"
         self.challenge = False
@@ -61,6 +65,10 @@ class MiniGameScreen:
                 else:
                     self.running = False
                 return
+            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                self.change_page(-1 if event.key == pygame.K_LEFT else 1)
+            elif event.type == pygame.MOUSEWHEEL:
+                self.change_page(-event.y)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.handle_click(event.pos)
                 if not self.running:
@@ -74,6 +82,12 @@ class MiniGameScreen:
         if self.btn_records.collidepoint(pos):
             self.view = "LIST" if self.view == "RECORDS" else "RECORDS"
             return
+        if self.prev_rect.collidepoint(pos):
+            self.change_page(-1)
+            return
+        if self.next_rect.collidepoint(pos):
+            self.change_page(1)
+            return
         if self.view == "RECORDS":
             return
 
@@ -81,8 +95,7 @@ class MiniGameScreen:
             if self.selected in CHALLENGE_GAMES:
                 self.challenge = not self.challenge
             return
-        for key, rect in (("jump", self.card_avoid), ("memory", self.card_memory),
-                          ("footsteps", self.card_footsteps), ("laser", self.card_laser)):
+        for key, rect in self.game_cards():
             if rect.collidepoint(pos):
                 self.selected = key
                 if key not in CHALLENGE_GAMES:
@@ -134,6 +147,8 @@ class MiniGameScreen:
         if minigame_id == "laser":
             difficulty = getattr(self.state, "difficulty", "normal")
             return run_laser_chase(self.screen, difficulty=difficulty, challenge=self.challenge)
+        if minigame_id == "timing":
+            return TimingGame(self.screen, self.state, challenge=self.challenge).run()
         return None
 
     def _apply_minigame_result(self, result, *, win_on_positive_coins=False):
@@ -185,9 +200,31 @@ class MiniGameScreen:
         txt = self.font.render(title, True, (0, 0, 0))
         self.screen.blit(txt, (rect.x + 20, rect.y + 20))
 
+    def game_cards(self):
+        keys = list(minigame_records.GAME_NAMES)[self.page * 4:(self.page + 1) * 4]
+        return [(key, pygame.Rect(40, 120 + index * 100, 320, 90)) for index, key in enumerate(keys)]
+
+    def change_page(self, delta):
+        last = (len(minigame_records.GAME_NAMES) - 1) // 4
+        next_page = max(0, min(last, self.page + delta))
+        if next_page != self.page:
+            self.page = next_page
+            self.selected = None
+            self.challenge = False
+
+    def draw_page_controls(self):
+        for rect, text in ((self.prev_rect, "이전"), (self.next_rect, "다음")):
+            pygame.draw.rect(self.screen, (220, 220, 220), rect)
+            pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+            label = self.hint_font.render(text, True, (0, 0, 0))
+            self.screen.blit(label, label.get_rect(center=rect.center))
+        pages = (len(minigame_records.GAME_NAMES) + 3) // 4
+        self.screen.blit(self.hint_font.render(f"{self.page + 1}/{pages}", True, (0, 0, 0)), (198, 536))
+
     def draw_records(self):
         data = minigame_records.normalize(getattr(self.state, "minigame_records", None))
-        for index, (key, name) in enumerate(minigame_records.GAME_NAMES.items()):
+        entries = list(minigame_records.GAME_NAMES.items())[self.page * 4:(self.page + 1) * 4]
+        for index, (key, name) in enumerate(entries):
             rect = pygame.Rect(20, 120 + index * 100, 360, 90)
             pygame.draw.rect(self.screen, (225, 230, 225), rect)
             pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
@@ -216,6 +253,7 @@ class MiniGameScreen:
         self.screen.blit(label, label.get_rect(center=self.btn_records.center))
         if self.view == "RECORDS":
             self.draw_records()
+            self.draw_page_controls()
             pygame.display.flip()
             return
 
@@ -225,14 +263,10 @@ class MiniGameScreen:
         mode = "도전 모드" if self.challenge else "일반 모드"
         self.screen.blit(self.hint_font.render(mode + " · 클릭해 전환" if enabled else "선택 후 모드 전환", True, (40, 40, 40)), (26, 95))
 
-        used_jump = getattr(self.state, "minigame_used", {}).get("jump", False) if self.state else False
-        used_memory = getattr(self.state, "minigame_used", {}).get("memory", False) if self.state else False
-        used_footsteps = getattr(self.state, "minigame_used", {}).get("footsteps", False) if self.state else False
-        used_laser = getattr(self.state, "minigame_used", {}).get("laser", False) if self.state else False
-        self.draw_card(self.card_avoid, "장애물 피하기", self.selected == "jump", used_jump)
-        self.draw_card(self.card_memory, "메모리 게임", self.selected == "memory", used_memory)
-        self.draw_card(self.card_footsteps, "고양이 따라가기", self.selected == "footsteps", used_footsteps)
-        self.draw_card(self.card_laser, "레이저 포인터", self.selected == "laser", used_laser)
+        used = getattr(self.state, "minigame_used", {})
+        for key, rect in self.game_cards():
+            self.draw_card(rect, minigame_records.GAME_NAMES[key], self.selected == key, used.get(key, False))
+        self.draw_page_controls()
 
         pygame.draw.rect(self.screen, (200, 200, 200), self.btn_start)
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_start, 1)
