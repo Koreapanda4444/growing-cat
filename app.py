@@ -841,6 +841,34 @@ class Game:
             self.toast_timer = 2.5
         return changed
 
+    def claim_daily_mission(self, index):
+        if self.scene != "DAILY" or not self.cat or self.cat.check_game_over():
+            return False
+        before = daily_missions.normalize(self.daily_missions)
+        money_before = self.state.money
+        inventory_before = dict(self.inventory)
+        data, reward = daily_missions.claim(self.daily_missions, index, self.state, self.inventory)
+        if reward is None:
+            return False
+        self.daily_missions = data
+        if not save.save_game(self.make_save_data()):
+            self.daily_missions = before
+            self.state.money = money_before
+            self.inventory.clear()
+            self.inventory.update(inventory_before)
+            self.toast_text = "보상 저장 실패. 다시 받아주세요."
+            self.toast_timer = 2.5
+            return False
+        if self.ach:
+            self.ach.on_event("coins_earned", amount=reward["coins"])
+        self.toast_text = f"미션 보상 +{reward['coins']}코인"
+        if reward["completed_today"]:
+            self.toast_text += f" / 연속 {data['streak']}일"
+        if reward["items"]:
+            self.toast_text += " / 사료 +1"
+        self.toast_timer = 2.5
+        return True
+
     def _prepare_daily_event(self):
         previous_day = self.daily_events["day"]
         self.daily_events = daily_events.roll_for_day(self.daily_events, self.state.day, self.cat)
@@ -913,6 +941,11 @@ class Game:
             self.scene = "MAIN"
         elif self.daily_events["status"] == "pending" and pygame.Rect(240, 205, 130, 32).collidepoint(pos):
             self.scene = "EVENT"
+        else:
+            for index in range(len(self.daily_missions["goals"])):
+                if self._daily_mission_claim_rect(index).collidepoint(pos):
+                    self.claim_daily_mission(index)
+                    return
 
     def open_evolve_menu(self):
         if not self.cat:
@@ -1390,6 +1423,10 @@ class Game:
                 self.restart_game()
                 return True
 
+        if self.scene == "DAILY" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+            self.claim_daily_mission(event.key - pygame.K_1)
+            return True
+
         if self.scene == "EVENT" and event.key in (pygame.K_RETURN, pygame.K_1, pygame.K_2, pygame.K_3):
             self.resolve_daily_event(0 if event.key == pygame.K_RETURN else event.key - pygame.K_1)
             return True
@@ -1529,7 +1566,7 @@ class Game:
         bg.blit(label, (pad_x, pad_y))
 
         x = 12
-        y = self.screen.get_height() - bg_h - 12
+        y = 490 if self.scene == "DAILY" else self.screen.get_height() - bg_h - 12
         self.screen.blit(bg, (x, y))
 
     def _draw_cat_dialogue(self):
@@ -1967,7 +2004,13 @@ class Game:
     def _daily_mission_rect(self, index):
         return pygame.Rect(20, 292 + index * 64, 360, 56)
 
+    def _daily_mission_claim_rect(self, index):
+        rect = self._daily_mission_rect(index)
+        return pygame.Rect(rect.right - 96, rect.y + 18, 86, 28)
+
     def _draw_daily_missions(self):
+        streak = f"연속 {self.daily_missions['streak']}일 · 최고 {self.daily_missions['best_streak']}일"
+        self.screen.blit(self.hint_font.render(streak, True, (90, 65, 90)), (140, 264))
         self.screen.blit(self.big_font.render("일일 목표", True, (30, 30, 30)), (20, 260))
         for index, goal in enumerate(self.daily_missions["goals"]):
             rect = self._daily_mission_rect(index)
@@ -1976,11 +2019,16 @@ class Game:
             pygame.draw.rect(self.screen, (70, 70, 70), rect, 1, border_radius=5)
             label = f"{daily_missions.LABELS[goal['id']]} {goal['target']}회"
             self.screen.blit(self.panel_font.render(label, True, (35, 35, 35)), (rect.x + 10, rect.y + 5))
-            progress = f"{goal['progress']}/{goal['target']}" + (" · 완료" if done else "")
+            progress = f"{goal['progress']}/{goal['target']}" + (" · 보상 받음" if goal["claimed"] else f" · +{goal['reward']}코인")
             self.screen.blit(self.hint_font.render(progress, True, (70, 70, 70)), (rect.x + 10, rect.y + 25))
             bar = pygame.Rect(rect.x + 10, rect.y + 46, 220, 5)
             pygame.draw.rect(self.screen, (195, 195, 195), bar)
             pygame.draw.rect(self.screen, (80, 145, 100), (bar.x, bar.y, round(bar.width * goal["progress"] / goal["target"]), bar.height))
+            button = self._daily_mission_claim_rect(index)
+            self.draw_button_state(button, "받음" if goal["claimed"] else "보상 받기", self.panel_font, done and not goal["claimed"])
+        status = "전체 달성 보너스 지급 완료!" if self.daily_missions["bonus_claimed"] else "세 미션 보상을 받으면 연속 달성에 반영됩니다."
+        self._draw_wrapped_text(status, (20, 490), 360)
+
 
     def draw_special_care(self):
         self._draw_game_view_base()
