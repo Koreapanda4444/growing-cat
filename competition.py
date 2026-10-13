@@ -11,6 +11,9 @@ INTERVAL_DAYS = 3
 HISTORY_LIMIT = 30
 GRADE_ORDER = ("S", "A", "B", "C")
 GRADE_RANK = {grade: index for index, grade in enumerate(GRADE_ORDER)}
+LEAGUE_POINTS = {"S": 5, "A": 3, "B": 1, "C": 0}
+LEAGUES = (("브론즈", 0, 0, 0), ("실버", 20, 1, 25), ("골드", 50, 3, 40),
+           ("플래티넘", 100, 8, 60), ("마스터", 180, 15, 90))
 
 
 COMPETITIONS = (
@@ -73,6 +76,7 @@ def new_competition_data() -> dict:
         "trophies": {},
         "history": [],
         "streak": 0, "best_streak": 0, "goals": [],
+        "league_points": 0, "league_claimed": [],
     }
 
 
@@ -129,6 +133,11 @@ def normalize_competition_data(value) -> dict:
     data["streak"] = _number(value.get("streak", trailing))
     data["best_streak"] = max(data["streak"], _number(value.get("best_streak", 0)))
     data["goals"] = achieved_goals(data)
+    confirmed = sum(t["wins"] for t in data["trophies"].values()) * 5
+    confirmed += sum(LEAGUE_POINTS[e["grade"]] for e in data["history"] if e["grade"] != "S")
+    data["league_points"] = max(confirmed, _number(value.get("league_points", 0)))
+    claimed = value.get("league_claimed", [])
+    data["league_claimed"] = [name for name, _, _, _ in LEAGUES[1:] if isinstance(claimed, list) and name in claimed]
     return data
 
 
@@ -348,6 +357,7 @@ def record_result(data, *, day: int, comp: dict, grade: str, score: int, reward:
         "reward": max(0, int(reward)),
     })
     normalized["history"] = normalized["history"][-HISTORY_LIMIT:]
+    normalized["league_points"] += LEAGUE_POINTS[grade]
     normalized["goals"] = achieved_goals(normalized)
     return normalized
 
@@ -358,3 +368,26 @@ def latest_today_result(data, day: int) -> dict | None:
         if entry.get("day") == day:
             return entry
     return None
+
+
+def league_info(data):
+    data = normalize_competition_data(data)
+    wins = sum(t["wins"] for t in data["trophies"].values())
+    index = max(i for i, (_, points, required_wins, _) in enumerate(LEAGUES)
+                if data["league_points"] >= points and wins >= required_wins)
+    next_level = LEAGUES[index + 1] if index + 1 < len(LEAGUES) else None
+    return {"name": LEAGUES[index][0], "index": index, "points": data["league_points"], "wins": wins,
+            "next": next_level}
+
+
+def claim_promotions(data):
+    data = normalize_competition_data(data)
+    info = league_info(data)
+    coins = 0
+    promoted = []
+    for name, _, _, reward in LEAGUES[1:info["index"] + 1]:
+        if name not in data["league_claimed"]:
+            data["league_claimed"].append(name)
+            coins += reward
+            promoted.append(name)
+    return data, coins, promoted

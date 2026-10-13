@@ -111,6 +111,10 @@ class CompetitionUI:
         self._draw_score_panel(ctx)
         self._draw_trophy_panel()
         self._draw_history_panel()
+        league = competition.league_info(self.competition_data)
+        level = league["next"]
+        text = f"다음 {level[0]}: {level[1]}P · {level[2]}승 / 우승=S등급" if level else "마스터 리그 달성! / 우승=S등급"
+        self.screen.blit(self.small_font.render(text, True, (70, 70, 70)), (20, 579))
         pygame.display.flip()
 
     def _draw_top(self):
@@ -118,8 +122,9 @@ class CompetitionUI:
         self.screen.blit(title, (20, 20))
 
         day = max(1, int(getattr(self.state, "day", 1)))
+        league = competition.league_info(self.competition_data)
         difficulty = game_state.get_difficulty_label(getattr(self.state, "difficulty", "normal"))
-        meta = self.font.render(f"{day}일차 / 난이도 {difficulty}", True, (70, 70, 70))
+        meta = self.font.render(f"{day}일차 / {difficulty} / {league['name']} {league['points']}P", True, (70, 70, 70))
         self.screen.blit(meta, (20, 52))
 
         pygame.draw.rect(self.screen, PANEL_COLOR, self.close_rect)

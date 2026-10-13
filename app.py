@@ -804,6 +804,7 @@ class Game:
         if money < fee:
             return {"ok": False, "message": "참가비가 부족합니다.", "competition_data": self.competition}
 
+        competition_before = competition.copy_for_save(self.competition)
         self.state.money = money - fee
         score = competition.roll_score(comp["id"], self.cat, self.state, self.inventory)
         grade = competition.grade_for_score(score, self.difficulty)
@@ -818,14 +819,19 @@ class Game:
             reward=reward,
         )
 
+        self.competition, promotion_reward, promoted = competition.claim_promotions(self.competition)
+        self.state.money += promotion_reward
+        if not save.save_game(self.make_save_data()):
+            self.competition = competition_before
+            self.state.money = money
+            return {"ok": False, "message": "저장 실패. 다시 참가해 주세요.", "competition_data": self.competition}
         if self.ach:
             self.ach.on_event("competition_entered", grade=grade)
-            if reward > 0:
-                self.ach.on_event("coins_earned", amount=reward)
-        save.save_game(self.make_save_data())
+            if reward + promotion_reward > 0:
+                self.ach.on_event("coins_earned", amount=reward + promotion_reward)
         return {
             "ok": True,
-            "message": f"{grade}등급! {score}점 / +{reward}코인",
+            "message": f"{grade}등급! {score}점 / +{reward}코인" + (f" · 진급 +{promotion_reward}" if promoted else ""),
             "competition_data": self.competition,
         }
 
