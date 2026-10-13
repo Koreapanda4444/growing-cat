@@ -1,5 +1,4 @@
 import pygame
-import sys
 import state as game_state
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
@@ -7,7 +6,7 @@ from minigames.cat_follow import CatFollowGame
 from minigames.laser_chase import run_laser_chase
 
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import screen_events, GameQuit, load_font
 
 FPS = 60    
 
@@ -15,15 +14,17 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:
-    def __init__(self, screen, state=None, ach=None):
+    def __init__(self, screen, state=None, ach=None, on_save=None):
         self.screen = screen
         self.state = state
         self.ach = ach
+        self.on_save = on_save
         self.clock = pygame.time.Clock()
         self.running = True
 
         self.font = load_font(FONT_PATH, 18)
         self.big_font = load_font(FONT_PATH, 22)
+        self.hint_font = load_font(FONT_PATH, 13)
 
         self.selected = None
 
@@ -38,15 +39,20 @@ class MiniGameScreen:
         while self.running:
             self.clock.tick(FPS)
             self.handle_events()
-            self.draw()
+            if self.running:
+                self.draw()
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+                raise GameQuit
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.running = False
+                return
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.handle_click(event.pos)
+                if not self.running:
+                    return
 
     def handle_click(self, pos):
         if self.btn_close.collidepoint(pos):
@@ -79,16 +85,21 @@ class MiniGameScreen:
         if self.state.minigame_used.get(self.selected):
             return
 
-        if self.ach:
-            self.ach.on_event("minigame_played")
+        self.state.minigame_used[self.selected] = True
+        if self.on_save and self.on_save() is False:
+            self.state.minigame_used[self.selected] = False
+            return
 
         result = self._run_minigame(self.selected)
         self._apply_minigame_result(
             result,
             win_on_positive_coins=self.selected == "jump",
         )
-        self.state.minigame_used[self.selected] = True
         self.running = False
+        if isinstance(result, dict) and result.get("quit_requested"):
+            raise GameQuit
+        if self.on_save:
+            self.on_save()
 
     def _ensure_minigame_usage(self):
         self.state.minigame_used = game_state.normalize_minigame_usage(
@@ -108,9 +119,11 @@ class MiniGameScreen:
         return None
 
     def _apply_minigame_result(self, result, *, win_on_positive_coins=False):
-        if not isinstance(result, dict):
+        if not isinstance(result, dict) or result.get("cancelled"):
             return
 
+        if self.ach:
+            self.ach.on_event("minigame_played")
         coins = self._scaled_result_coins(result)
         if coins > 0:
             self._add_coins(coins)
@@ -174,4 +187,6 @@ class MiniGameScreen:
         start_text = self.font.render("시작하기", True, (0, 0, 0))
         self.screen.blit(start_text, start_text.get_rect(center=self.btn_start.center))
 
+        hint = self.hint_font.render("ESC 중단: 보상 없음 / 현재 시간대 시도 소모", True, (90, 70, 70))
+        self.screen.blit(hint, hint.get_rect(center=(200, 580)))
         pygame.display.flip()

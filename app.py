@@ -14,7 +14,7 @@ import evolution
 import competition
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
-from pg_utils import load_font, load_image, load_sound, play_music
+from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
 from achievements import AchievementsManager, draw_toasts
 from achievements_ui import AchievementsUI
 from pathlib import Path
@@ -391,6 +391,7 @@ class Game:
             self.actions_used = {key: False for key in CARE_ACTION_KEYS}
         self.competition = competition.normalize_competition_data(data.get("competition"))
         self.scene = "MAIN"
+        self.check_game_over()
 
     def load_image(self, filename):
         image = load_image(filename, alpha=True)
@@ -400,17 +401,20 @@ class Game:
         return image
 
     def _save_if_game_active(self):
-        if self.app_mode == "GAME" and self.scene == "MAIN" and self.cat:
-            save.save_game(self.make_save_data())
+        if self.app_mode == "GAME" and self.cat:
+            return save.save_game(self.make_save_data())
+        return False
 
     def run(self):
         while self.running:
             dt = self.clock.tick(FPS) / 1000.0
             events = pygame.event.get()
-            self.handle_events(events)
+            try:
+                self.handle_events(events)
+            except GameQuit:
+                self.request_quit = True
 
             if self.request_quit:
-                self._save_if_game_active()
                 self.running = False
                 continue
 
@@ -436,14 +440,16 @@ class Game:
             self.update(dt)
             self.draw()
 
+        self._save_if_game_active()
         pygame.quit()
-        sys.exit()
 
     def start_new_game(self, name: str, difficulty: str = "normal", personality: str = "energetic"):
         name = str(name or "").strip()
         if not name:
             return
 
+        self.paused = False
+        self.request_to_start = False
         self.difficulty = state.normalize_difficulty(difficulty)
         self.personality = state.normalize_personality(personality)
 
@@ -474,6 +480,8 @@ class Game:
         save.save_game(self.make_save_data())
 
     def advance_time(self):
+        if not self.cat or self.scene != "MAIN" or self.cat.check_game_over():
+            return
         phase = self.state.advance_time()
         if phase == state.NIGHT:
             self.cat.on_night()
@@ -484,7 +492,8 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.state.minigame_used = state.new_minigame_usage()
 
-        evolved = phase == state.MORNING and self._try_auto_evolve()
+        self.check_game_over()
+        evolved = not self.game_over_reason and phase == state.MORNING and self._try_auto_evolve()
         if evolved:
             self.scene = "EVOLVE"
             self.evolve_timer = 0
@@ -583,29 +592,27 @@ class Game:
                 "cleanliness": int(self.cat.cleanliness),
             }
             self.scene = "GAME_OVER"
+            self.cat.alive = result != "DEAD"
+            self.cat.runaway = result == "RUNAWAY"
+            self.paused = False
 
     def restart_game(self):
         self.state = state.GameState()
         self.difficulty = "normal"
-        self.cat = None
-        self.panel_open = False
-        self.left_panel_open = False
-        self.game_over_reason = None
-        self.ending_log = {}
-        self.inventory = {}
-        self.competition = competition.new_competition_data()
-        self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
-        self._cat_image_path = None
-        self._cat_image = None
-        self._cat_image_stage = None
-        self._cat_display_image = None
-        self._cat_display_body_rect = None
-        self._cat_rect = None
-        self._cat_click_count = 0
+        self.personality = "energetic"
+        self._init_game_defaults()
+        self.paused = False
+        self.request_to_start = False
         self.cat_dialogue_text = ""
         self.cat_dialogue_timer = 0.0
+        self.toast_text = ""
+        self.toast_timer = 0.0
         self.flow.reset_to_start()
         self.app_mode = "START_FLOW"
+
+    def _reset_game(self):
+        self.ach = self._init_achievements()
+        self.restart_game()
 
     def make_save_data(self):
         try:
@@ -664,7 +671,7 @@ class Game:
         from settings import SettingsScreen
         SettingsScreen(
             self.screen,
-            self.restart_game,
+            self._reset_game,
             play_click_sound=self.play_click_sound,
         ).run()
 
@@ -677,11 +684,9 @@ class Game:
             difficulty=self.difficulty,
         )
         shop.run()
-        save.save_game(self.make_save_data())
 
     def open_minigame(self):
-        MiniGameScreen(self.screen, self.state, self.ach).run()
-        save.save_game(self.make_save_data())
+        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active).run()
 
     def open_competition(self):
         self.panel_open = False
@@ -695,10 +700,9 @@ class Game:
             self.enter_competition,
             self.play_click_sound,
         ).run()
-        save.save_game(self.make_save_data())
 
     def enter_competition(self):
-        if not self.cat:
+        if not self.cat or self.cat.check_game_over():
             return {"ok": False, "message": "고양이가 없습니다.", "competition_data": self.competition}
 
         day = max(1, safe_int(getattr(self.state, "day", 1), 1))
@@ -743,7 +747,6 @@ class Game:
 
     def open_bag(self):
         BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
-        save.save_game(self.make_save_data())
 
     def open_achievements(self):
         self.panel_open = False
@@ -838,7 +841,7 @@ class Game:
 
     def use_item(self, item):
         item = normalize_inventory_item(item)
-        if not self.cat or item not in self.inventory or self.inventory[item] <= 0:
+        if not self.cat or self.cat.check_game_over() or item not in self.inventory or self.inventory[item] <= 0:
             return
 
         used = True
@@ -998,7 +1001,7 @@ class Game:
                 self.play_click_sound()
                 if self.actions_used[key]:
                     return True
-                if self.cat:
+                if self.cat and not self.cat.check_game_over():
                     getattr(self.cat, actions[index])()
                     self.actions_used[key] = True
                     save.save_game(self.make_save_data())
@@ -1033,32 +1036,27 @@ class Game:
             if self._panel_button_rect(panel_x, index).collidepoint(pos):
                 self.play_click_sound()
                 action()
+                self._discard_events = True
                 return True
 
         return False
 
     def handle_events(self, events):
+        self._discard_events = False
+        if any(event.type == pygame.QUIT for event in events):
+            self.request_quit = True
+            return
         for event in events:
-            if self._handle_quit_event(event):
-                continue
+            if self.request_quit or self.request_to_start or self._discard_events:
+                break
+            previous = (self.app_mode, self.scene, self.paused)
 
             if self.app_mode == "START_FLOW":
                 self.flow.handle_event(event)
-                continue
-
-            if self._handle_pause_event(event):
-                continue
-            if self._handle_scene_key_event(event):
-                continue
-            self._handle_scene_mouse_event(event)
-
-    def _handle_quit_event(self, event):
-        if event.type != pygame.QUIT:
-            return False
-
-        self._save_if_game_active()
-        self.running = False
-        return True
+            elif not self._handle_pause_event(event) and not self._handle_scene_key_event(event):
+                self._handle_scene_mouse_event(event)
+            if previous != (self.app_mode, self.scene, self.paused):
+                break
 
     def _handle_pause_event(self, event):
         if self.app_mode != "GAME" or self.scene == "GAME_OVER":
@@ -1084,6 +1082,7 @@ class Game:
             self.paused = False
         elif action == "settings":
             self.open_settings()
+            self._discard_events = True
         elif action == "to_start":
             self.request_to_start = True
         elif action == "quit":
@@ -1092,6 +1091,7 @@ class Game:
             self._take_photo_toast()
         elif action == "album":
             self.open_album()
+            self._discard_events = True
 
     def _handle_scene_key_event(self, event):
         if event.type != pygame.KEYDOWN:
@@ -1099,7 +1099,7 @@ class Game:
 
         if self.scene == "GAME_OVER":
             if event.key == pygame.K_ESCAPE:
-                self.running = False
+                self.request_quit = True
                 return True
             if event.key == pygame.K_r:
                 self.restart_game()

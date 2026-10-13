@@ -2,6 +2,7 @@ import random
 import math
 import pygame
 
+from pg_utils import screen_events
 import state as game_state
 
 
@@ -164,18 +165,20 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
         W, H = screen.get_size()
         fonts = _get_laser_fonts(H)
 
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                return {"won": False, "score": score, "coins": 0}
+                return {"won": won, "score": score,
+                        "coins": _coins_from_score(score, won) if phase == "RESULT" else 0,
+                        "cancelled": phase != "RESULT", "quit_requested": True}
 
             if phase == "RESULT":
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
                     running = False
+                    break
                 continue
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                phase = "RESULT"
-                won = False
+                return {"won": False, "score": score, "coins": 0, "cancelled": True}
 
             if phase == "PLAY":
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -219,6 +222,9 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
                         combo = 0
                         toast_text = f"-{MISS_PENALTY} (미스)"
                         toast_timer = 0.55
+
+        if not running:
+            break
 
         if phase == "PLAY":
             time_left -= dt

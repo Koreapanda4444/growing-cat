@@ -3,7 +3,7 @@ import random
 import pygame
 
 from config import asset_path
-from pg_utils import load_font, load_image, solid_surface
+from pg_utils import screen_events, load_font, load_image, solid_surface
 import state as game_state
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
@@ -19,6 +19,8 @@ class CatFollowGame:
         self.balance = game_state.get_minigame_profile(self.difficulty, "footsteps")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.cancelled = False
+        self.quit_requested = False
 
         self.font = load_font(FONT_PATH, 22)
         self.font_big = load_font(FONT_PATH, 38)
@@ -49,7 +51,6 @@ class CatFollowGame:
         self.last_click_timer = 0.0
 
         self.won = False
-        self._result_once = False
 
         self._cat_src = self._load_cat_source()
         self._scaled_tile = None
@@ -119,38 +120,41 @@ class CatFollowGame:
         self.won = bool(won)
 
     def run(self):
-        if self.ach:
-            self.ach.on_event("minigame_played")
-
         while self.running:
             dt = self.clock.tick(60) / 1000.0
             w, h, tile, gx, gy, ui_offset_y = self._build_layout()
             self._ensure_scaled_cat(tile)
 
-            for event in pygame.event.get():
+            for event in screen_events():
                 if not self._handle_event(event, tile, gx, gy):
                     break
 
-            self._update(dt)
-            self._draw(w, h, tile, gx, gy, ui_offset_y)
+            if self.running:
+                self._update(dt)
+                self._draw(w, h, tile, gx, gy, ui_offset_y)
 
         coins = self._coins_from(self.cats_correct, self.rounds_cleared)
-        return {"won": bool(self.won), "score": 0, "coins": int(coins)}
+        return {"won": bool(self.won) and not self.cancelled, "score": 0,
+                "coins": 0 if self.cancelled else int(coins),
+                "cancelled": self.cancelled, "quit_requested": self.quit_requested}
 
     def _handle_event(self, event, tile, gx, gy):
         if event.type == pygame.QUIT:
-            self._finish(False)
+            self.quit_requested = True
+            self.cancelled = self.phase != "RESULT"
             self.running = False
             return False
 
         if self.phase == "RESULT":
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
                 self.running = False
+                return False
             return True
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self._finish(False)
-            return True
+            self.cancelled = True
+            self.running = False
+            return False
 
         if self.phase == "INPUT" and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_input_click(event.pos, tile, gx, gy)
@@ -201,7 +205,6 @@ class CatFollowGame:
     def _update(self, dt):
         self._update_last_click(dt)
         self._update_show_phase(dt)
-        self._send_result_event_once()
 
     def _update_last_click(self, dt):
         if self.last_click_timer <= 0:
@@ -227,13 +230,6 @@ class CatFollowGame:
         if self.show_step >= len(self.sequence):
             self.phase = "INPUT"
             self.input_index = 0
-
-    def _send_result_event_once(self):
-        if self.phase != "RESULT" or self._result_once:
-            return
-        if self.won and self.ach:
-            self.ach.on_event("minigame_won")
-        self._result_once = True
 
     def _draw(self, w, h, tile, gx, gy, ui_offset_y):
         self.screen.fill((18, 18, 22))

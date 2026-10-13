@@ -5,6 +5,16 @@ from typing import Optional, Tuple
 import pygame
 
 
+class GameQuit(Exception):
+    pass
+
+
+def screen_events():
+    events = pygame.event.get()
+    quit_events = [event for event in events if event.type == pygame.QUIT]
+    return quit_events[:1] or events
+
+
 Size = Tuple[int, int]
 
 

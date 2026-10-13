@@ -2,7 +2,7 @@ import pygame
 import save
 
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import screen_events, GameQuit, load_font
 
 
 WIDTH = 400
@@ -32,12 +32,13 @@ class SettingsScreen:
         while self.running:
             clock.tick(60)
             self.handle_events()
-            self.draw()
+            if self.running:
+                self.draw()
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                self.running = False
+                raise GameQuit
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -45,6 +46,7 @@ class SettingsScreen:
                         self.confirm_reset = False
                     else:
                         self.running = False
+                    return
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if not self.confirm_reset and self.reset_rect.collidepoint(event.pos):
@@ -54,7 +56,8 @@ class SettingsScreen:
 
                 elif self.confirm_reset and self.confirm_rect.collidepoint(event.pos):
                     self._click()
-                    self.reset_data()
+                    if self.reset_data():
+                        return
 
                 elif self.confirm_reset and self.cancel_rect.collidepoint(event.pos):
                     self._click()
@@ -63,6 +66,7 @@ class SettingsScreen:
                 elif not self.confirm_reset and self.back_rect.collidepoint(event.pos):
                     self._click()
                     self.running = False
+                    return
 
     def _click(self):
         if self.play_click_sound:

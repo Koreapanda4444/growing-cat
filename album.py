@@ -4,7 +4,7 @@ from pathlib import Path
 import pygame
 
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import screen_events, GameQuit, load_font
 from photo_mode import album_folder, list_photos
 
 
@@ -51,7 +51,8 @@ class AlbumUI:
         while self.running:
             clock.tick(60)
             self.handle_events()
-            self.draw()
+            if self.running:
+                self.draw()
 
     def _click(self):
         if self.play_click_sound:
@@ -70,9 +71,9 @@ class AlbumUI:
         self.scroll = max(0, min(int(self.scroll) + int(delta), self._max_scroll()))
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                self.running = False
+                raise GameQuit
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -83,6 +84,7 @@ class AlbumUI:
                         self.selected_index = None
                     else:
                         self.running = False
+                        return
                 elif self.selected_index is not None and event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
                     self._request_or_confirm_delete()
                 elif self.selected_index is not None and event.key == pygame.K_LEFT:

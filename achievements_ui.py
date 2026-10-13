@@ -1,7 +1,7 @@
 import pygame
 
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import screen_events, GameQuit, load_font
 
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
@@ -32,7 +32,8 @@ class AchievementsUI:
         while self.running:
             clock.tick(60)
             self.handle_events()
-            self.draw()
+            if self.running:
+                self.draw()
 
     def _max_scroll(self, items_count: int) -> int:
         _, screen_h = self.screen.get_size()
@@ -46,13 +47,14 @@ class AchievementsUI:
         self.scroll = max(0, min(int(self.scroll) + int(delta), max_scroll))
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                self.running = False
+                raise GameQuit
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
+                    return
 
             elif event.type == pygame.MOUSEWHEEL:
                 self._scroll_by(-event.y * 40)

@@ -3,7 +3,7 @@ import state as game_state
 
 from config import asset_path
 from items import get_shop_categories
-from pg_utils import load_font, load_image
+from pg_utils import screen_events, GameQuit, load_font, load_image
 
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
@@ -49,21 +49,24 @@ class ShopUI:
         while self.running:
             clock.tick(60)
             self.handle_events()
-            self.draw()
+            if self.running:
+                self.draw()
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                self.running = False
+                raise GameQuit
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
+                    return
+                elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    self.change_page(-1 if event.key == pygame.K_LEFT else 1)
+                    return
 
             elif event.type == pygame.MOUSEWHEEL:
                 self.change_page(-event.y)
-            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
-                self.change_page(-1 if event.key == pygame.K_LEFT else 1)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.prev_rect.collidepoint(event.pos):
                     self.change_page(-1)

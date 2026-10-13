@@ -3,7 +3,7 @@ import pygame
 import competition
 import state as game_state
 from config import asset_path
-from pg_utils import load_font
+from pg_utils import screen_events, GameQuit, load_font
 
 
 BG_COLOR = (245, 245, 245)
@@ -36,19 +36,21 @@ class CompetitionUI:
         while self.running:
             clock.tick(60)
             self.handle_events()
-            self.draw()
+            if self.running:
+                self.draw()
 
     def _click(self):
         if self.play_click_sound:
             self.play_click_sound()
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
-                self.running = False
+                raise GameQuit
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
+                    return
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self._try_enter()
             elif event.type == pygame.MOUSEBUTTONDOWN:

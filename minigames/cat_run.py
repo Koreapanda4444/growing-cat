@@ -3,7 +3,7 @@ import random
 import sys
 
 from config import asset_path
-from pg_utils import load_font, load_image, solid_surface
+from pg_utils import screen_events, load_font, load_image, solid_surface
 import state as game_state
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
@@ -22,6 +22,8 @@ class CatRunGame:
         self.on_game_end = on_game_end
         self.clock = pygame.time.Clock()
         self.running = True
+        self.cancelled = False
+        self.quit_requested = False
 
         self.font = load_font(FONT_PATH, 18)
         self._load_assets()
@@ -123,12 +125,17 @@ class CatRunGame:
         self.max_spawn_meters = max(self.min_spawn_meters + 6, self.base_max_spawn_meters - meter_drop)
 
     def handle_events(self):
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
+                self.quit_requested = True
+                self.cancelled = True
                 self.running = False
+                return
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    self.cancelled = True
                     self.running = False
+                    return
                 if event.key == pygame.K_SPACE:
                     if self.jump_count < self.max_jumps:
                         self.cat_vel_y = self.jump_power
@@ -192,15 +199,17 @@ class CatRunGame:
         while self.running:
             self.clock.tick(FPS)
             self.handle_events()
-            self.update()
-            self.draw()
+            if self.running:
+                self.update()
+                self.draw()
 
         return self.get_reward()
 
     def get_reward(self):
         distance_int = int(self.distance)
         coin_reward = (distance_int // 100) * 10
-        return {"distance": distance_int, "coins": coin_reward}
+        return {"distance": distance_int, "coins": 0 if self.cancelled else coin_reward,
+                "cancelled": self.cancelled, "quit_requested": self.quit_requested}
 
     def _compute_next_spawn_frames(self):
         meters = random.randint(self.min_spawn_meters, self.max_spawn_meters)
@@ -226,7 +235,7 @@ if __name__ == "__main__":
         screen.blit(coins, (WIDTH // 2 - 60, HEIGHT // 2 + 20))
         pygame.display.flip()
 
-        for event in pygame.event.get():
+        for event in screen_events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()

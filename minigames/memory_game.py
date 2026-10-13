@@ -2,7 +2,7 @@ import pygame
 import random
 
 from config import asset_path
-from pg_utils import load_font, load_image, solid_surface
+from pg_utils import screen_events, load_font, load_image, solid_surface
 import state as game_state
 
 WIDTH = 400
@@ -21,6 +21,8 @@ class MemoryGame:
         self.balance = game_state.get_minigame_profile(self.difficulty, "memory")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.cancelled = False
+        self.quit_requested = False
 
         self.font = load_font(FONT_PATH, 22)
         self.small_font = load_font(FONT_PATH, 16)
@@ -201,12 +203,17 @@ class MemoryGame:
         while self.running:
             self.clock.tick(60)
 
-            for event in pygame.event.get():
+            for event in screen_events():
                 if event.type == pygame.QUIT:
+                    self.quit_requested = True
+                    self.cancelled = True
                     self.running = False
+                    break
 
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.cancelled = True
                     self.running = False
+                    break
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
@@ -214,7 +221,12 @@ class MemoryGame:
                 elif event.type == MISMATCH_EVENT:
                     self.handle_mismatch_timeout()
 
-            self.update()
-            self.draw()
+            if self.running:
+                self.update()
+                self.draw()
 
-        return {"won": bool(self.won), "coins": int(self.reward_coins)}
+        self._set_mismatch_timer(0)
+        pygame.event.clear(MISMATCH_EVENT)
+        return {"won": bool(self.won) and not self.cancelled,
+                "coins": 0 if self.cancelled else int(self.reward_coins),
+                "cancelled": self.cancelled, "quit_requested": self.quit_requested}
