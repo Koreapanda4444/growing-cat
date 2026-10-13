@@ -95,7 +95,7 @@ class Cat:
             return "happy"
         return "calm"
 
-    def care_reaction(self, action, previous_mood=None):
+    def care_reaction(self, action, previous_mood=None, recent=()):
         mood = previous_mood or self.mood
         relief = {
             ("hungry", "feed"): "밥을 챙겨줘서 힘이 난다냥!",
@@ -103,7 +103,7 @@ class Cat:
             ("uncomfortable", "clean"): "털이 보송보송해졌다냥.",
             ("lonely", "play"): "같이 놀아줘서 고맙다냥!",
         }
-        if (mood, action) in relief:
+        if (mood, action) in relief and relief[mood, action] not in recent:
             preferred = state.get_personality_profile(self.personality)["preferred_action"]
             if action != preferred or random.random() < 0.6:
                 return relief[mood, action]
@@ -111,7 +111,10 @@ class Cat:
             return "재밌지만 밥이나 휴식도 필요하다냥."
         profile = state.get_personality_profile(self.personality)
         lines = profile["care_lines"].get(action, state.MOOD_PROFILE[self.mood]["lines"])
-        return random.choice(lines)
+        choices = [line for line in lines if line not in recent]
+        if not choices:
+            choices = [line for line in state.MOOD_PROFILE[self.mood]["lines"] if line not in recent]
+        return random.choice(choices or lines)
 
     def change_friendship(self, amount):
         before = self.friendship

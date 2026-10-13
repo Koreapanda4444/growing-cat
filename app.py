@@ -229,6 +229,22 @@ CAT_NEED_LINES = (
 )
 
 
+CAT_FRIENDSHIP_LINES = {
+    "낯선 사이": ("너를 천천히 알아가는 중이다냥.", "조심히 다가가도 괜찮겠냥?", "아직은 조금 낯설다냥."),
+    "익숙한 사이": ("이제 네 발소리를 안다냥.", "오늘도 와줘서 반갑다냥.", "손길이 점점 익숙해진다냥."),
+    "친구": ("넌 내 좋은 친구다냥!", "같이 보내는 시간이 좋다냥.", "오늘도 옆자리를 남겨뒀다냥."),
+    "단짝": ("눈만 봐도 마음이 통한다냥.", "네 곁이면 안심된다냥.", "우리만의 놀이를 하자냥."),
+    "가족": ("네 곁이 내 집이다냥.", "오래오래 함께 지내자냥.", "언제나 네 편이다냥."),
+}
+
+CAT_STAGE_LINES = {
+    evolution.BABY: ("작은 발로 세상을 배우는 중이다냥.", "조금씩 커지는 게 느껴진다냥.", "아직 궁금한 게 많다냥!"),
+    evolution.ADULT: ("이제 제법 의젓해졌다냥.", "어릴 때보다 높이 뛸 수 있다냥.", "널 지켜보는 건 내 일이다냥."),
+    evolution.LION: ("갈기가 근사하게 자랐다냥!", "작게 어흥 해보겠다냥.", "사자여도 손길은 좋다냥."),
+    evolution.DINO: ("큰 몸으로도 살살 다가간다냥.", "공룡이어도 네 고양이다냥!", "꼬리를 조심히 움직이겠다냥."),
+}
+
+
 def safe_int(value, default=0):
     try:
         return int(value)
@@ -338,6 +354,7 @@ class Game:
         self._cat_display_body_rect = None
         self._cat_rect = None
         self._cat_click_count = 0
+        self._dialogue_history = []
         if not hasattr(self.state, "minigame_used"):
             self.state.minigame_used = state.new_minigame_usage()
         self.evolve_timer = 0
@@ -482,6 +499,7 @@ class Game:
         self._cat_display_body_rect = None
         self._cat_rect = None
         self._cat_click_count = 0
+        self._dialogue_history = []
         self.cat_dialogue_text = ""
         self.cat_dialogue_timer = 0.0
         self.panel_open = False
@@ -892,7 +910,9 @@ class Game:
         self.inventory[item] -= 1
         self.cat._clamp_all()
         self._record_care_friendship(action, before)
-        self.cat_dialogue_text = self.cat.care_reaction(action, previous_mood)
+        self.cat_dialogue_text = self._remember_cat_line(
+            self.cat.care_reaction(action, previous_mood, recent=self._dialogue_history)
+        )
         self.cat_dialogue_timer = 2.2
         save.save_game(self.make_save_data())
 
@@ -1020,26 +1040,40 @@ class Game:
         self.friendship_used[action] = True
         self._change_friendship(self.cat.care_friendship_change(action, before))
 
-    def _cat_dialogue_line(self):
+    def _remember_cat_line(self, line):
+        self._dialogue_history.append(line)
+        self._dialogue_history = self._dialogue_history[-4:]
+        return line
+
+    def _cat_dialogue_pools(self):
+        mood = self.cat.mood
+        urgent = mood not in ("happy", "calm")
+        personality = state.normalize_personality(self.cat.personality)
+        friendship_label, _, _ = state.friendship_progress(self.cat.friendship)
+        pools = [
+            (55 if urgent else 30, state.MOOD_PROFILE[mood]["lines"]),
+            (12 if urgent else 45, CAT_CLICK_LINES[personality]),
+            (8 if urgent else 22, CAT_FRIENDSHIP_LINES[friendship_label]),
+            (5 if urgent else 18, CAT_STAGE_LINES.get(self.cat.stage, CAT_CLICK_LINES["default"])),
+            (3, CAT_CLICK_LINES["default"]),
+        ]
         for stat_name, threshold, lines in CAT_NEED_LINES:
-            value = getattr(self.cat, stat_name, 0)
-            try:
-                value = float(value)
-            except (TypeError, ValueError):
-                value = 0
+            value = getattr(self.cat, stat_name)
+            deficit = threshold - value if stat_name in ("happiness", "cleanliness") else value - threshold
+            if deficit >= 0:
+                pools.append((70 + deficit * 2, lines))
+        return pools
 
-            if stat_name in ("happiness", "cleanliness"):
-                if value <= threshold:
-                    return random.choice(lines)
-            elif value >= threshold:
-                return random.choice(lines)
-
-        if random.random() < 0.65:
-            return random.choice(state.MOOD_PROFILE[self.cat.mood]["lines"])
-
-        personality = state.normalize_personality(getattr(self.cat, "personality", None))
-        lines = CAT_CLICK_LINES.get(personality, CAT_CLICK_LINES["default"])
-        return random.choice(lines)
+    def _cat_dialogue_line(self):
+        available = []
+        weights = []
+        for weight, lines in self._cat_dialogue_pools():
+            choices = [line for line in lines if line not in self._dialogue_history]
+            if choices:
+                available.append(choices)
+                weights.append(weight)
+        lines = random.choices(available, weights=weights, k=1)[0]
+        return self._remember_cat_line(random.choice(lines))
 
     def _handle_care_panel_click(self, pos):
         panel_x = WIDTH - PANEL_W - 8
@@ -1059,7 +1093,9 @@ class Game:
                     before = getattr(self.cat, CARE_STAT_KEYS[key])
                     getattr(self.cat, actions[index])()
                     self._record_care_friendship(key, before)
-                    self.cat_dialogue_text = self.cat.care_reaction(key, previous_mood)
+                    self.cat_dialogue_text = self._remember_cat_line(
+                        self.cat.care_reaction(key, previous_mood, recent=self._dialogue_history)
+                    )
                     self.cat_dialogue_timer = 2.2
                     self.actions_used[key] = True
                     save.save_game(self.make_save_data())
