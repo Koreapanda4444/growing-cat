@@ -1909,6 +1909,7 @@ class Game:
         self.screen.fill((245, 245, 245))
         self.screen.blit(self.big_font.render(f"{self.state.day}일차 · 오늘의 활동", True, (30, 30, 30)), (20, 24))
         event = daily_events.EVENTS.get(self.daily_events["event"])
+        self.screen.blit(self.hint_font.render(f"누적 이벤트 완료: {self.daily_events['completed']}회", True, (80, 80, 80)), (20, 54))
         if self.scene == "EVENT" and event:
             panel = pygame.Rect(20, 118, 360, 420)
             pygame.draw.rect(self.screen, (230, 235, 225), panel, border_radius=12)
@@ -1917,15 +1918,17 @@ class Game:
             y = 185
             for line in event["text"]:
                 y = self._draw_wrapped_text(line, (35, y), 330)
+            self._draw_wrapped_text(f"이야기 종류: {daily_events.KIND_LABELS[event['kind']]}", (35, 249), 330)
             self._draw_wrapped_text("하루 한 번 발생 / 확인한 결과는 저장됩니다.", (35, 275), 330)
             for index, choice in enumerate(event["choices"]):
                 rect = self._event_choice_rect(index)
-                pygame.draw.rect(self.screen, (220, 225, 215), rect, border_radius=5)
-                pygame.draw.rect(self.screen, (60, 60, 60), rect, 1, border_radius=5)
-                label = self.panel_font.render(f"{index + 1}. {choice['label']}", True, (30, 30, 30))
-                self.screen.blit(label, (rect.x + 7, rect.y + 4))
                 result = daily_events.preview_choice(self.daily_events["event"], index, self.cat, self.state, self.inventory)
-                self._draw_wrapped_text(self._daily_result_text(result), (rect.x + 7, rect.y + 24), 316, font=self.stat_font)
+                enabled = result["available"]
+                pygame.draw.rect(self.screen, (220, 225, 215) if enabled else (220, 220, 220), rect, border_radius=5)
+                pygame.draw.rect(self.screen, (60, 60, 60), rect, 1, border_radius=5)
+                label = self.panel_font.render(f"{index + 1}. {choice['label']}", True, (30, 30, 30) if enabled else (125, 125, 125))
+                self.screen.blit(label, (rect.x + 7, rect.y + 4))
+                self._draw_wrapped_text(self._daily_result_text(result) if enabled else "코인이 부족합니다.", (rect.x + 7, rect.y + 24), 316, font=self.stat_font)
             self.draw_button(pygame.Rect(100, 490, 200, 30), "나중에 (ESC)", self.panel_font)
             return
         self.screen.blit(self.big_font.render("오늘의 이벤트", True, (30, 30, 30)), (20, 80))
