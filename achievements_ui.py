@@ -19,6 +19,7 @@ class AchievementsUI:
 
         self.font = load_font(FONT_PATH, 18)
         self.big_font = load_font(FONT_PATH, 22)
+        self.small_font = load_font(FONT_PATH, 13)
 
         self.close_rect = pygame.Rect(360, 10, 30, 30)
 
@@ -118,7 +119,7 @@ class AchievementsUI:
             pygame.draw.rect(self.screen, BORDER, rect, 1)
 
             title = self.font.render(f"{it.get('title', '')}  (+{it.get('points', 0)})", True, (0, 0, 0))
-            desc = self.font.render(str(it.get("desc", "")), True, (70, 70, 70))
+            desc = self.small_font.render(str(it.get("desc", "")), True, (70, 70, 70))
             self.screen.blit(title, (rect.x + 10, rect.y + 6))
             self.screen.blit(desc, (rect.x + 10, rect.y + 30))
 

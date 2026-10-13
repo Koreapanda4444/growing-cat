@@ -438,11 +438,12 @@ class Game:
         saved_missions = daily_missions.normalize(data.get("daily_missions"))
         self.daily_missions = daily_missions.for_day(saved_missions, self.state)
         missions_created = saved_missions != self.daily_missions
+        self._sync_achievements()
         self.scene = "MAIN"
         self.check_game_over()
         if not self.game_over_reason:
             if self._prepare_daily_event() or missions_created:
-                save.save_game(self.make_save_data())
+                self._save_progress()
             self._show_pending_event()
 
     def load_image(self, filename):
@@ -452,9 +453,19 @@ class Game:
             sys.exit()
         return image
 
+    def _sync_achievements(self):
+        if self.ach and self.cat:
+            self.ach.check_progress(self.state, self.cat, self.competition, self.daily_events, self.daily_missions)
+
+    def _save_progress(self):
+        saved = save.save_game(self.make_save_data())
+        if saved:
+            self._sync_achievements()
+        return saved
+
     def _save_if_game_active(self):
         if self.app_mode == "GAME" and self.cat:
-            return save.save_game(self.make_save_data())
+            return self._save_progress()
         return False
 
     def run(self):
@@ -538,7 +549,7 @@ class Game:
         self.daily_missions = daily_missions.for_day(self.daily_missions, self.state)
         self._prepare_daily_event()
         self._show_pending_event()
-        save.save_game(self.make_save_data())
+        self._save_progress()
 
     def advance_time(self):
         if not self.cat or self.scene != "MAIN" or self.cat.check_game_over():
@@ -572,7 +583,7 @@ class Game:
             self._prepare_daily_event()
             if self.scene != "EVOLVE":
                 self._show_pending_event()
-        save.save_game(self.make_save_data())
+        self._save_progress()
 
     def _grant_day_reward(self):
         day_reward = state.get_day_coin_reward(self.difficulty)
@@ -821,7 +832,7 @@ class Game:
 
         self.competition, promotion_reward, promoted = competition.claim_promotions(self.competition)
         self.state.money += promotion_reward
-        if not save.save_game(self.make_save_data()):
+        if not self._save_progress():
             self.competition = competition_before
             self.state.money = money
             return {"ok": False, "message": "저장 실패. 다시 참가해 주세요.", "competition_data": self.competition}
@@ -839,6 +850,7 @@ class Game:
         BagUI(self.screen, self.inventory, self.use_item, self.play_click_sound).run()
 
     def open_achievements(self):
+        self._sync_achievements()
         self.panel_open = False
         self.left_panel_open = False
         AchievementsUI(self.screen, self.ach, self.play_click_sound).run()
@@ -865,7 +877,7 @@ class Game:
         if reward is None:
             return False
         self.daily_missions = data
-        if not save.save_game(self.make_save_data()):
+        if not self._save_progress():
             self.daily_missions = before
             self.state.money = money_before
             self.inventory.clear()
@@ -911,7 +923,7 @@ class Game:
         self.toast_timer = 2.5
         self._start_cat_reaction(self.cat.mood)
         self.scene = "DAILY"
-        save.save_game(self.make_save_data())
+        self._save_progress()
         return True
 
     def _event_choice_rect(self, index):
@@ -1012,7 +1024,7 @@ class Game:
         self.toast_text = f"특별 돌봄 완료 / 친밀도 {result['friendship']:+d}"
         self.toast_timer = 2.0
         self.scene = "MAIN"
-        save.save_game(self.make_save_data())
+        self._save_progress()
         return True
 
     def _special_care_card_rect(self, index):
@@ -1099,7 +1111,7 @@ class Game:
 
         self.scene = "EVOLVE"
         self.evolve_timer = 0
-        save.save_game(self.make_save_data())
+        self._save_progress()
         return True
 
     def use_item(self, item):
@@ -1138,7 +1150,7 @@ class Game:
             self.cat.care_reaction(action, previous_mood, recent=self._dialogue_history)
         )
         self.cat_dialogue_timer = 2.2
-        save.save_game(self.make_save_data())
+        self._save_progress()
 
     def on_buy_item(self, item):
         if not isinstance(item, dict):
@@ -1174,7 +1186,7 @@ class Game:
         if self.ach:
             self.ach.on_event("item_bought")
         
-        save.save_game(self.make_save_data())
+        self._save_progress()
         return True
 
     def _advance_rect(self):
@@ -1251,7 +1263,7 @@ class Game:
             self._cat_display_image = None
             self._cat_display_body_rect = None
         if friendship_recorded or image_changed or mission_changed:
-            save.save_game(self.make_save_data())
+            self._save_progress()
         return True
 
     def _change_friendship(self, amount):
@@ -1327,7 +1339,7 @@ class Game:
                     )
                     self.cat_dialogue_timer = 2.2
                     self.actions_used[key] = True
-                    save.save_game(self.make_save_data())
+                    self._save_progress()
                     self.check_game_over()
                 return True
 
