@@ -9,7 +9,7 @@ from minigames.laser_chase import run_laser_chase
 from config import asset_path
 from pg_utils import screen_events, GameQuit, load_font
 
-CHALLENGE_GAMES = {"jump"}
+CHALLENGE_GAMES = {"jump", "memory", "footsteps"}
 
 FPS = 60    
 
@@ -128,9 +128,9 @@ class MiniGameScreen:
         if minigame_id == "jump":
             return CatRunGame(self.screen, self.state, challenge=self.challenge).run()
         if minigame_id == "memory":
-            return MemoryGame(self.screen, self.state).run()
+            return MemoryGame(self.screen, self.state, challenge=self.challenge).run()
         if minigame_id == "footsteps":
-            return CatFollowGame(self.screen, self.state).run()
+            return CatFollowGame(self.screen, self.state, challenge=self.challenge).run()
         if minigame_id == "laser":
             difficulty = getattr(self.state, "difficulty", "normal")
             return run_laser_chase(self.screen, difficulty=difficulty)

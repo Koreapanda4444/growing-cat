@@ -11,12 +11,13 @@ ASSET_DIR = asset_path("minigames", "cat_follow")
 
 
 class CatFollowGame:
-    def __init__(self, screen: pygame.Surface, state=None, ach=None):
+    def __init__(self, screen: pygame.Surface, state=None, ach=None, challenge=False):
         self.screen = screen
         self.state = state
         self.ach = ach
         self.difficulty = game_state.normalize_difficulty(getattr(state, "difficulty", None))
         self.balance = game_state.get_minigame_profile(self.difficulty, "footsteps")
+        self.challenge = bool(challenge)
         self.clock = pygame.time.Clock()
         self.running = True
         self.cancelled = False
@@ -32,6 +33,11 @@ class CatFollowGame:
         self.show_on_s = float(self.balance["show_on_s"])
         self.show_off_s = float(self.balance["show_off_s"])
         self.max_fails = int(self.balance["max_fails"])
+        if self.challenge:
+            self.start_len += 0 if self.difficulty == "easy" else 1
+            self.target_round += 1
+            self.sequence_growth = max(1, self.sequence_growth)
+            self.show_on_s *= 0.95 if self.difficulty == "easy" else 0.90
 
         self.cats_correct = 0
         self.rounds_cleared = 0
@@ -80,7 +86,11 @@ class CatFollowGame:
     def _coins_from(self, cats_correct: int, rounds_cleared: int):
         cats_correct = max(0, int(cats_correct))
         rounds_cleared = max(0, int(rounds_cleared))
-        return cats_correct * 2 + rounds_cleared * 10
+        coins = cats_correct * 2 + rounds_cleared * 10
+        if self.challenge:
+            baseline = sum(self.balance["start_len"] + (i * self.balance["sequence_growth"]) for i in range(self.balance["target_round"])) * 2
+            coins = min(coins, baseline + self.balance["target_round"] * 10 + 10)
+        return coins
 
     def _build_layout(self):
         w, h = self.screen.get_size()
@@ -133,12 +143,20 @@ class CatFollowGame:
                 self._update(dt)
                 self._draw(w, h, tile, gx, gy, ui_offset_y)
 
+        return self.get_result()
+
+    def get_result(self):
         coins = self._coins_from(self.cats_correct, self.rounds_cleared)
         return {"won": bool(self.won) and not self.cancelled, "score": self.cats_correct,
-                "rounds": self.rounds_cleared,
+                "rounds": self.rounds_cleared, "errors": self.fails,
                 "sequence_length": self._sequence_length_for_round(self.rounds_cleared) if self.rounds_cleared else 0,
+                "mode": "challenge" if self.challenge else "normal",
+                "challenge_won": self.challenge and self.won and not self.cancelled,
                 "coins": 0 if self.cancelled else int(coins),
                 "cancelled": self.cancelled, "quit_requested": self.quit_requested}
+
+    def _input_sequence(self):
+        return list(reversed(self.sequence)) if self.challenge and self.round_idx % 2 == 0 else self.sequence
 
     def _handle_event(self, event, tile, gx, gy):
         if event.type == pygame.QUIT:
@@ -169,7 +187,7 @@ class CatFollowGame:
 
         self.last_click = cell
         self.last_click_timer = 0.12
-        if cell == self.sequence[self.input_index]:
+        if cell == self._input_sequence()[self.input_index]:
             self._handle_correct_input()
         else:
             self._handle_wrong_input()
@@ -243,7 +261,7 @@ class CatFollowGame:
         pygame.display.flip()
 
     def _draw_header(self, w, h, ui_offset_y):
-        title = self.font_big.render("고양이 따라가기", True, (255, 255, 255))
+        title = self.font_big.render("따라가기 도전" if self.challenge else "고양이 따라가기", True, (255, 255, 255))
         self.screen.blit(title, title.get_rect(center=(w // 2, int(h * 0.09) + ui_offset_y)))
 
         hud = self.font.render(
@@ -280,10 +298,11 @@ class CatFollowGame:
         self.screen.blit(self._cat_tile, (cx, cy))
 
     def _draw_phase_hint(self, w, h):
+        direction = "역순" if self.challenge and self.round_idx % 2 == 0 else "정순"
         if self.phase == "INPUT":
-            text = f"입력: {self.input_index}/{len(self.sequence)}"
+            text = f"{direction} 입력: {self.input_index}/{len(self.sequence)}"
         elif self.phase == "SHOW":
-            text = "기억하세요..."
+            text = f"{direction}으로 기억하세요..."
         else:
             return
         prog = self.font.render(text, True, (255, 255, 255))

@@ -14,11 +14,21 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 MISMATCH_EVENT = pygame.USEREVENT + 1
 
 class MemoryGame:
-    def __init__(self, screen, state):
+    def __init__(self, screen, state, challenge=False):
         self.screen = screen
         self.state = state
         self.difficulty = game_state.normalize_difficulty(getattr(state, "difficulty", None))
         self.balance = game_state.get_minigame_profile(self.difficulty, "memory")
+        self.challenge = bool(challenge)
+        self.stage = 1
+        self.target_stages = (2 if self.difficulty == "easy" else 3) if self.challenge else 1
+        self.total_pairs = 0
+        self.total_elapsed_ms = 0
+        self.completed_stages = 0
+        self.order_index = 0
+        self.required_order = []
+        self.stage_fail_start = 0
+        self.error_limit = {"easy": 6, "normal": 4, "hard": 3}[self.difficulty]
         self.clock = pygame.time.Clock()
         self.running = True
         self.cancelled = False
@@ -26,6 +36,7 @@ class MemoryGame:
 
         self.font = load_font(FONT_PATH, 22)
         self.small_font = load_font(FONT_PATH, 16)
+        self.card_label_font = load_font(FONT_PATH, 12)
 
         self.cards = []
         self.first = None
@@ -50,6 +61,7 @@ class MemoryGame:
         self.reveal_end_ms = None
         self.limit_start_ms = None
         self.preview_ms = int(self.balance["preview_ms"])
+        self.base_preview_ms = self.preview_ms
         self.time_limit_ms = int(self.balance["time_limit_ms"])
         self.mismatch_ms = int(self.balance["mismatch_ms"])
         self.reward_base = int(self.balance["reward_base"])
@@ -70,6 +82,8 @@ class MemoryGame:
     def load_cards(self):
         all_ids = list(range(1, 17))
         chosen = random.sample(all_ids, 8)
+        self.required_order = sorted(chosen)
+        self.order_index = 0
 
         colors = [
             (255, 100, 100), (100, 255, 100), (100, 100, 255), (255, 255, 100),
@@ -124,11 +138,20 @@ class MemoryGame:
                 break
 
     def check_match(self):
-        if self.first["id"] == self.second["id"]:
+        ordered = (not self.challenge or self.stage == 1
+                   or self.first["id"] == self.required_order[self.order_index])
+        if self.first["id"] == self.second["id"] and ordered:
             self.first["matched"] = True
             self.second["matched"] = True
             self.first = None
             self.second = None
+            self.order_index += 1
+            if self.challenge and self.stage >= 3 and self.order_index % 2 == 0:
+                hidden = [card for card in self.cards if not card["matched"]]
+                rects = [card["rect"].copy() for card in hidden]
+                random.shuffle(rects)
+                for card, rect in zip(hidden, rects):
+                    card["rect"] = rect
         else:
             self.lock = True
             self.fail_count += 1
@@ -158,15 +181,28 @@ class MemoryGame:
             self.started = True
             self.limit_start_ms = now
 
+        if self.challenge and self.fail_count - self.stage_fail_start > self.error_limit:
+            self.running = False
+            return
         if all(c["matched"] for c in self.cards):
-            reward_base = getattr(self, "reward_base", 80)
-            fail_penalty = getattr(self, "fail_penalty", 10)
-            reward = max(10, reward_base - fail_penalty * self.fail_count)
+            self.total_pairs += len(self.cards) // 2
+            self.completed_stages += 1
+            self.total_elapsed_ms += max(0, now - self.limit_start_ms) if self.limit_start_ms is not None else 0
+            if self.stage < self.target_stages:
+                self.stage += 1
+                self.stage_fail_start = self.fail_count
+                self.preview_ms = max(600, round(self.base_preview_ms * (0.9 ** (self.stage - 1))))
+                self.started = False
+                self.limit_start_ms = None
+                self.first = self.second = None
+                self.lock = False
+                self._set_mismatch_timer(0)
+                pygame.event.clear(MISMATCH_EVENT)
+                self.load_cards()
+                return
+            reward = max(10, self.reward_base + (10 if self.challenge else 0) - self.fail_penalty * self.fail_count)
             self.won = True
-            try:
-                self.reward_coins = max(0, int(reward))
-            except (TypeError, ValueError):
-                self.reward_coins = 0
+            self.reward_coins = reward
             self.running = False
             return
 
@@ -176,7 +212,7 @@ class MemoryGame:
     def draw(self):
         self.screen.fill((245, 245, 245))
 
-        title = self.font.render("메모리 게임", True, (0, 0, 0))
+        title = self.font.render(f"메모리 도전 {self.stage}/{self.target_stages}" if self.challenge else "메모리 게임", True, (0, 0, 0))
         self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 30))
 
         info = self.small_font.render(
@@ -191,9 +227,20 @@ class MemoryGame:
             t = self.small_font.render(f"남은 시간: {remain_s}초", True, (120, 80, 80))
             self.screen.blit(t, (WIDTH - t.get_width() - 20, 60))
 
+        if self.challenge:
+            target = self.required_order[self.order_index] if self.order_index < len(self.required_order) else "완료"
+            rule = "자유 매칭" if self.stage == 1 else f"작은 번호 순서 · 다음 {target}"
+            self.screen.blit(self.small_font.render(f"{rule} / 단계 실수 한도 {self.error_limit}", True, (90, 70, 70)), (20, 88))
+            if self.stage >= 3:
+                self.screen.blit(self.small_font.render("두 쌍마다 남은 카드의 위치가 바뀝니다.", True, (90, 70, 70)), (20, 110))
         for card in self.cards:
             if card["revealed"] or card["matched"]:
                 self.screen.blit(card["image"], (card["rect"].x, card["rect"].y))
+                if self.challenge:
+                    badge = pygame.Rect(card["rect"].x + 2, card["rect"].y + 2, 20, 16)
+                    pygame.draw.rect(self.screen, (250, 250, 250), badge)
+                    label = self.card_label_font.render(str(card["id"]), True, (0, 0, 0))
+                    self.screen.blit(label, label.get_rect(center=badge.center))
             else:
                 self.screen.blit(self.back_image, (card["rect"].x, card["rect"].y))
 
@@ -227,9 +274,17 @@ class MemoryGame:
 
         self._set_mismatch_timer(0)
         pygame.event.clear(MISMATCH_EVENT)
-        pairs = sum(card["matched"] for card in self.cards) // 2
-        elapsed = max(0, pygame.time.get_ticks() - self.limit_start_ms) if self.limit_start_ms is not None else 0
+        return self.get_result()
+
+    def get_result(self):
+        pairs = self.total_pairs + (0 if self.won else sum(card["matched"] for card in self.cards) // 2)
+        elapsed = self.total_elapsed_ms
+        if not self.won and self.limit_start_ms is not None:
+            elapsed += max(0, pygame.time.get_ticks() - self.limit_start_ms)
         return {"pairs": pairs, "errors": self.fail_count, "score": max(0, pairs * 100 - self.fail_count * 10),
-                "elapsed_ms": elapsed, "won": bool(self.won) and not self.cancelled,
+                "elapsed_ms": elapsed, "stages": self.completed_stages,
+                "mode": "challenge" if self.challenge else "normal",
+                "challenge_won": self.challenge and self.won and not self.cancelled,
+                "won": bool(self.won) and not self.cancelled,
                 "coins": 0 if self.cancelled else int(self.reward_coins),
                 "cancelled": self.cancelled, "quit_requested": self.quit_requested}

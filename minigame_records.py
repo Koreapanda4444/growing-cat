@@ -1,7 +1,7 @@
 GAME_NAMES = {"jump": "장애물 피하기", "memory": "메모리 게임", "footsteps": "고양이 따라가기", "laser": "레이저 포인터"}
-BEST_METRICS = {"jump": ("distance", "obstacles"), "memory": ("score", "pairs"),
+BEST_METRICS = {"jump": ("distance", "obstacles"), "memory": ("score", "pairs", "stages"),
                 "footsteps": ("score", "rounds", "sequence_length"), "laser": ("score", "best_combo", "accuracy")}
-METRICS = ("distance", "obstacles", "score", "pairs", "errors", "elapsed_ms", "rounds", "sequence_length", "best_combo", "hits", "misses", "accuracy")
+METRICS = ("distance", "obstacles", "score", "pairs", "errors", "elapsed_ms", "rounds", "sequence_length", "best_combo", "hits", "misses", "accuracy", "stages")
 
 
 def _int(value):
