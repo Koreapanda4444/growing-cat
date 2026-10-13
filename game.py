@@ -9,6 +9,8 @@ from minigames.laser_chase import run_laser_chase
 from config import asset_path
 from pg_utils import screen_events, GameQuit, load_font
 
+CHALLENGE_GAMES = {"jump"}
+
 FPS = 60    
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
@@ -30,6 +32,8 @@ class MiniGameScreen:
 
         self.selected = None
         self.view = "LIST"
+        self.challenge = False
+        self.btn_mode = pygame.Rect(20, 88, 180, 28)
         self._result_applied = False
         self.btn_records = pygame.Rect(232, 52, 150, 32)
 
@@ -73,18 +77,17 @@ class MiniGameScreen:
         if self.view == "RECORDS":
             return
 
-        if self.card_avoid.collidepoint(pos):
-            self.selected = "jump"
+        if self.btn_mode.collidepoint(pos):
+            if self.selected in CHALLENGE_GAMES:
+                self.challenge = not self.challenge
             return
-        if self.card_memory.collidepoint(pos):
-            self.selected = "memory"
-            return
-        if self.card_footsteps.collidepoint(pos):
-            self.selected = "footsteps"
-            return
-        if self.card_laser.collidepoint(pos):
-            self.selected = "laser"
-            return
+        for key, rect in (("jump", self.card_avoid), ("memory", self.card_memory),
+                          ("footsteps", self.card_footsteps), ("laser", self.card_laser)):
+            if rect.collidepoint(pos):
+                self.selected = key
+                if key not in CHALLENGE_GAMES:
+                    self.challenge = False
+                return
         if self.btn_start.collidepoint(pos):
             self.start_selected_game()
 
@@ -108,7 +111,7 @@ class MiniGameScreen:
         result = self._run_minigame(self.selected)
         self._apply_minigame_result(
             result,
-            win_on_positive_coins=self.selected == "jump",
+            win_on_positive_coins=self.selected == "jump" and not self.challenge,
         )
         self.running = False
         if isinstance(result, dict) and result.get("quit_requested"):
@@ -123,7 +126,7 @@ class MiniGameScreen:
 
     def _run_minigame(self, minigame_id):
         if minigame_id == "jump":
-            return CatRunGame(self.screen, self.state).run()
+            return CatRunGame(self.screen, self.state, challenge=self.challenge).run()
         if minigame_id == "memory":
             return MemoryGame(self.screen, self.state).run()
         if minigame_id == "footsteps":
@@ -192,6 +195,7 @@ class MiniGameScreen:
             self.screen.blit(self.font.render(name, True, (0, 0, 0)), (rect.x + 12, rect.y + 8))
             self.screen.blit(self.hint_font.render(f"완료 {entry['plays']}회 / 성공 {entry['wins']}회", True, (65, 65, 65)), (rect.x + 12, rect.y + 35))
             self.screen.blit(self.hint_font.render(minigame_records.best_summary(key, entry), True, (65, 65, 65)), (rect.x + 12, rect.y + 56))
+            self.screen.blit(self.hint_font.render(f"도전 완료 {entry['challenge_plays']}회 / 달성 {entry['challenge_wins']}회", True, (65, 65, 65)), (rect.x + 12, rect.y + 73))
 
     def draw(self):
         self.screen.fill((235, 235, 235))
@@ -214,6 +218,12 @@ class MiniGameScreen:
             self.draw_records()
             pygame.display.flip()
             return
+
+        enabled = self.selected in CHALLENGE_GAMES
+        pygame.draw.rect(self.screen, (205, 225, 205) if enabled else (215, 215, 215), self.btn_mode)
+        pygame.draw.rect(self.screen, (0, 0, 0), self.btn_mode, 1)
+        mode = "도전 모드" if self.challenge else "일반 모드"
+        self.screen.blit(self.hint_font.render(mode + " · 클릭해 전환" if enabled else "선택 후 모드 전환", True, (40, 40, 40)), (26, 95))
 
         used_jump = getattr(self.state, "minigame_used", {}).get("jump", False) if self.state else False
         used_memory = getattr(self.state, "minigame_used", {}).get("memory", False) if self.state else False

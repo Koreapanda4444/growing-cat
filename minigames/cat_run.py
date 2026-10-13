@@ -11,14 +11,18 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 WIDTH, HEIGHT = 400, 600
 FPS = 60
 GROUND_Y = 450
+CHALLENGE_TARGETS = {"easy": 250, "normal": 350, "hard": 450}
 
 
 class CatRunGame:
-    def __init__(self, screen, state=None, on_game_end=None):
+    def __init__(self, screen, state=None, on_game_end=None, challenge=False):
         self.screen = screen
         self.state = state
         self.difficulty = game_state.normalize_difficulty(getattr(state, "difficulty", None))
         self.balance = game_state.get_minigame_profile(self.difficulty, "jump")
+        self.challenge = bool(challenge)
+        self.target_distance = CHALLENGE_TARGETS[self.difficulty] if self.challenge else None
+        self.won = False
         self.on_game_end = on_game_end
         self.clock = pygame.time.Clock()
         self.running = True
@@ -86,11 +90,12 @@ class CatRunGame:
         self.jump_power = -15
         self.on_ground = True
         self.jump_count = 0
-        self.max_jumps = 2
+        self.max_jumps = 1 if self.challenge and self.difficulty == "hard" else 2
 
     def _init_obstacles(self):
         self.obstacles = []
-        self.base_obstacle_speed = float(self.balance["base_speed"])
+        multiplier = {"easy": 1.05, "normal": 1.10, "hard": 1.12}[self.difficulty] if self.challenge else 1.0
+        self.base_obstacle_speed = float(self.balance["base_speed"]) * multiplier
         self.obstacle_speed_step = float(self.balance["speed_step"])
         self.obstacle_speed = self.base_obstacle_speed
         self.spawn_timer = 0
@@ -177,6 +182,10 @@ class CatRunGame:
 
             if cat_rect.colliderect(obs[1]):
                 self.running = False
+                return
+        if self.challenge and self.distance >= self.target_distance:
+            self.won = True
+            self.running = False
 
     def draw(self):
         self.screen.blit(self.bg, (self.bg_x1, 0))
@@ -187,12 +196,14 @@ class CatRunGame:
         for obs in self.obstacles:
             self.screen.blit(obs[0], obs[1])
 
-        distance_text = self.font.render(f"{int(self.distance)}m", True, (0, 0, 0))
+        distance_text = self.font.render(f"{int(self.distance)}m" + (f" / 목표 {self.target_distance}m" if self.challenge else ""), True, (0, 0, 0))
         self.screen.blit(distance_text, (10, 10))
 
         speed_text = self.font.render(f"Speed: {self.obstacle_speed:.1f}", True, (0, 0, 0))
         self.screen.blit(speed_text, (10, 30))
 
+        if self.challenge:
+            self.screen.blit(self.font.render(f"도전 모드 · 연속 점프 {self.max_jumps}회", True, (30, 30, 30)), (10, 55))
         pygame.display.flip()
 
     def run(self):
@@ -208,7 +219,10 @@ class CatRunGame:
     def get_reward(self):
         distance_int = int(self.distance)
         coin_reward = (distance_int // 100) * 10
-        return {"distance": distance_int, "obstacles": self.score, "coins": 0 if self.cancelled else coin_reward,
+        return {"distance": distance_int, "obstacles": self.score,
+                "mode": "challenge" if self.challenge else "normal",
+                "won": self.won and not self.cancelled, "challenge_won": self.challenge and self.won and not self.cancelled,
+                "target_distance": self.target_distance, "coins": 0 if self.cancelled else coin_reward,
                 "cancelled": self.cancelled, "quit_requested": self.quit_requested}
 
     def _compute_next_spawn_frames(self):

@@ -12,7 +12,8 @@ def _int(value):
 
 
 def new_records():
-    return {key: {"plays": 0, "wins": 0, "best": {}, "last": {}, "last_difficulty": "normal"} for key in GAME_NAMES}
+    return {key: {"plays": 0, "wins": 0, "best": {}, "last": {}, "last_difficulty": "normal", "challenge_plays": 0, "challenge_wins": 0,
+                  "challenge_clears": {level: False for level in ("easy", "normal", "hard")}} for key in GAME_NAMES}
 
 
 def normalize(value):
@@ -29,8 +30,16 @@ def normalize(value):
             source = saved.get(field)
             if isinstance(source, dict):
                 entry[field] = {metric: _int(source[metric]) for metric in METRICS if metric in source}
-        if isinstance(saved.get("last"), dict):
+        if isinstance(saved.get("last"), dict) and saved["last"]:
             entry["last"]["won"] = bool(saved["last"].get("won"))
+        entry["challenge_plays"] = min(entry["plays"], _int(saved.get("challenge_plays")))
+        entry["challenge_wins"] = min(entry["challenge_plays"], _int(saved.get("challenge_wins")))
+        clears = saved.get("challenge_clears")
+        if isinstance(clears, dict):
+            entry["challenge_clears"] = {level: bool(clears.get(level, False)) for level in entry["challenge_clears"]}
+        if isinstance(saved.get("last"), dict) and saved["last"]:
+            entry["last"]["mode"] = "challenge" if saved["last"].get("mode") == "challenge" else "normal"
+            entry["last"]["challenge_won"] = bool(saved["last"].get("challenge_won"))
         difficulty = saved.get("last_difficulty")
         entry["last_difficulty"] = difficulty if difficulty in ("easy", "normal", "hard") else "normal"
     return data
@@ -46,6 +55,15 @@ def record_result(value, game_id, result, won, difficulty="normal"):
     entry["last"] = {key: _int(result[key]) for key in METRICS if key in result}
     entry["last"]["won"] = bool(won)
     entry["last_difficulty"] = difficulty
+    challenge = result.get("mode") == "challenge"
+    entry["last"]["mode"] = "challenge" if challenge else "normal"
+    entry["last"]["challenge_won"] = bool(result.get("challenge_won")) and bool(won)
+    if challenge:
+        entry["challenge_plays"] += 1
+        if entry["last"]["challenge_won"]:
+            entry["challenge_wins"] += 1
+            if difficulty in entry["challenge_clears"]:
+                entry["challenge_clears"][difficulty] = True
     for metric in BEST_METRICS[game_id]:
         if metric in result:
             entry["best"][metric] = max(entry["best"].get(metric, 0), _int(result[metric]))
