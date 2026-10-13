@@ -11,6 +11,8 @@ PERSONALITY_ENERGETIC = "energetic"
 PERSONALITY_CALM = "calm"
 PERSONALITY_LAZY = "lazy"
 
+CARE_LABELS = {"feed": "밥", "play": "놀기", "clean": "씻기", "sleep": "잠자기"}
+
 MINIGAME_KEYS = ("jump", "memory", "footsteps", "laser")
 
 DIFFICULTY_PROFILE = {
@@ -164,6 +166,14 @@ PERSONALITY_PROFILE = {
     PERSONALITY_ENERGETIC: {
         "label": "활발함",
         "description": "항상 밝고 행복해해!",
+        "preferred_action": "play",
+        "care_modifiers": {"play": {"happiness_recovery": 1.30}},
+        "care_lines": {
+            "feed": ("밥 먹고 신나게 뛰겠다냥!", "에너지가 채워진다냥!"),
+            "play": ("이 놀이가 제일 좋다냥!", "함께 뛰니까 더 신난다냥!"),
+            "clean": ("깨끗한 발로 또 뛰겠다냥!", "씻을 때는 잠깐 얌전히 있겠다냥."),
+            "sleep": ("꿈에서도 달릴 거다냥!", "잘 쉬고 다시 놀자냥!"),
+        },
         "happiness_recovery": 1.20,
         "tiredness_increase": 1.15,
         "coin_bonus": 1.10,
@@ -171,6 +181,14 @@ PERSONALITY_PROFILE = {
     PERSONALITY_CALM: {
         "label": "차분함",
         "description": "천천히 생각하는 냥이",
+        "preferred_action": "clean",
+        "care_modifiers": {"clean": {"cleanliness_decrease": 0.90}},
+        "care_lines": {
+            "feed": ("천천히 꼭꼭 먹겠다냥.", "조용한 식사 시간이 좋다냥."),
+            "play": ("천천히 따라가도 재밌다냥.", "차분히 눈으로 쫓는 중이다냥."),
+            "clean": ("털을 정돈하니 마음도 편하다냥.", "보송한 털이 제일 좋다냥."),
+            "sleep": ("곁에서 조용히 쉬겠다냥.", "따뜻한 낮잠을 준비한다냥."),
+        },
         "hunger_increase": 0.80,
         "tiredness_recovery": 1.20,
         "coin_bonus": 1.00,
@@ -178,6 +196,14 @@ PERSONALITY_PROFILE = {
     PERSONALITY_LAZY: {
         "label": "냥냥함",
         "description": "쉬고 싶어하는 냥이",
+        "preferred_action": "sleep",
+        "care_modifiers": {"sleep": {"tiredness_recovery": 1.15}},
+        "care_lines": {
+            "feed": ("밥 먹고 누우면 딱 좋다냥.", "간식 시간에는 일어나겠다냥."),
+            "play": ("누워서 잡아도 되냥?", "살짝만 움직여도 재밌다냥."),
+            "clean": ("포근한 털로 눕겠다냥.", "씻었으니 이제 쉬고 싶다냥."),
+            "sleep": ("이 시간이 제일 좋다냥.", "포근한 꿈을 꾸겠다냥."),
+        },
         "cleanliness_decrease": 0.80,
         "tiredness_increase": 0.85,
         "coin_bonus": 1.00,

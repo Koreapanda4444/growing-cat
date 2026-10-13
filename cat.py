@@ -103,23 +103,23 @@ class Cat:
             ("lonely", "play"): "같이 놀아줘서 고맙다냥!",
         }
         if (mood, action) in relief:
-            return relief[mood, action]
+            preferred = state.get_personality_profile(self.personality)["preferred_action"]
+            if action != preferred or random.random() < 0.6:
+                return relief[mood, action]
         if action == "play" and mood in ("hungry", "tired"):
             return "재밌지만 밥이나 휴식도 필요하다냥."
-        return random.choice(state.MOOD_PROFILE[self.mood]["lines"])
+        profile = state.get_personality_profile(self.personality)
+        lines = profile["care_lines"].get(action, state.MOOD_PROFILE[self.mood]["lines"])
+        return random.choice(lines)
 
-    def _get_personality_modifier(self, stat_type: str) -> float:
-        """성격에 따른 스탯 변화 배율 반환"""
-        prof = state.get_personality_profile(self.personality)
-        
-        # 프로필에서 해당 stat_type의 배율 가져오기
-        if stat_type in prof:
-            return prof[stat_type]
-        return 1.0
+    def _get_personality_modifier(self, stat_type: str, action=None) -> float:
+        profile = state.get_personality_profile(self.personality)
+        overrides = profile.get("care_modifiers", {}).get(action, {})
+        return overrides.get(stat_type, profile.get(stat_type, 1.0))
 
-    def _roll_stat_change(self, rng, difficulty_kind: str, modifier_key: str, *, inverse_modifier: bool = False) -> int:
+    def _roll_stat_change(self, rng, difficulty_kind: str, modifier_key: str, *, inverse_modifier: bool = False, action=None) -> int:
         value = state.rand_range(state.scaled_range(rng, self.difficulty, difficulty_kind))
-        modifier = self._get_personality_modifier(modifier_key)
+        modifier = self._get_personality_modifier(modifier_key, action)
         if inverse_modifier:
             return int(value / modifier)
         return int(value * modifier)
@@ -179,7 +179,9 @@ class Cat:
     def play_free(self):
         if not self._can_act():
             return
-        happiness_inc = self._roll_stat_change(state.FREE_PLAY_HAPPINESS_INC, "recovery", "happiness_recovery")
+        happiness_inc = self._roll_stat_change(
+            state.FREE_PLAY_HAPPINESS_INC, "recovery", "happiness_recovery", action="play"
+        )
         tiredness_inc = self._roll_stat_change(state.FREE_PLAY_TIREDNESS_INC, "pressure", "tiredness_increase")
         hunger_inc = self._roll_stat_change(state.FREE_PLAY_HUNGER_INC, "pressure", "hunger_increase")
         cleanliness_dec = self._roll_stat_change(state.FREE_PLAY_CLEANLINESS_DEC, "pressure", "cleanliness_decrease")
@@ -198,6 +200,7 @@ class Cat:
             "recovery",
             "cleanliness_decrease",
             inverse_modifier=True,
+            action="clean",
         )
         happiness_dec = self._roll_stat_change(
             state.CLEAN_HAPPINESS_DEC,
@@ -213,7 +216,9 @@ class Cat:
     def sleep(self):
         if not self._can_act():
             return
-        tiredness_dec = self._roll_stat_change(state.SLEEP_TIREDNESS_DEC, "recovery", "tiredness_recovery")
+        tiredness_dec = self._roll_stat_change(
+            state.SLEEP_TIREDNESS_DEC, "recovery", "tiredness_recovery", action="sleep"
+        )
         happiness_inc = self._roll_stat_change(state.SLEEP_HAPPINESS_INC, "recovery", "happiness_recovery")
         
         self.tiredness -= tiredness_dec

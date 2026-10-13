@@ -1345,6 +1345,13 @@ class Game:
         pygame.draw.circle(self.screen, mood["color"], (INFO_X + 5, 90), 4)
         label = self.hint_font.render(f"기분: {mood['label']}", True, mood["color"])
         self.screen.blit(label, (INFO_X + 15, 82))
+        profile = state.get_personality_profile(self.cat.personality)
+        personality = self.hint_font.render(f"성격: {profile['label']}", True, (60, 60, 60))
+        preferred = self.hint_font.render(
+            f"좋아하는 돌봄: {state.CARE_LABELS[profile['preferred_action']]}", True, (60, 60, 60)
+        )
+        self.screen.blit(personality, (INFO_X, 106))
+        self.screen.blit(preferred, (INFO_X, 128))
 
     def _draw_stats(self):
         self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))
