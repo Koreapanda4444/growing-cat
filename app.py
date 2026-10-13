@@ -14,6 +14,7 @@ import save
 import evolution
 import competition
 import daily_events
+import daily_missions
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
@@ -351,6 +352,7 @@ class Game:
         self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.special_care = state.normalize_special_care(None, self.state.day)
         self.daily_events = daily_events.new_data()
+        self.daily_missions = daily_missions.new_data()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -427,10 +429,13 @@ class Game:
         self.special_care = state.normalize_special_care(data.get("special_care"), self.state.day)
         self.competition = competition.normalize_competition_data(data.get("competition"))
         self.daily_events = daily_events.normalize(data.get("daily_events"))
+        saved_missions = daily_missions.normalize(data.get("daily_missions"))
+        self.daily_missions = daily_missions.for_day(saved_missions, self.state)
+        missions_created = saved_missions != self.daily_missions
         self.scene = "MAIN"
         self.check_game_over()
         if not self.game_over_reason:
-            if self._prepare_daily_event():
+            if self._prepare_daily_event() or missions_created:
                 save.save_game(self.make_save_data())
             self._show_pending_event()
 
@@ -505,6 +510,7 @@ class Game:
         self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.special_care = state.normalize_special_care(None, self.state.day)
         self.daily_events = daily_events.new_data()
+        self.daily_missions = daily_missions.new_data()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -523,6 +529,7 @@ class Game:
 
         self.scene = "MAIN"
         self.app_mode = "GAME"
+        self.daily_missions = daily_missions.for_day(self.daily_missions, self.state)
         self._prepare_daily_event()
         self._show_pending_event()
         save.save_game(self.make_save_data())
@@ -555,6 +562,7 @@ class Game:
 
         self.check_game_over()
         if phase == state.MORNING and not self.game_over_reason:
+            self.daily_missions = daily_missions.for_day(self.daily_missions, self.state)
             self._prepare_daily_event()
             if self.scene != "EVOLVE":
                 self._show_pending_event()
@@ -713,6 +721,7 @@ class Game:
             },
             "special_care": state.normalize_special_care(self.special_care, clean_day),
             "daily_events": daily_events.normalize(self.daily_events),
+            "daily_missions": daily_missions.normalize(self.daily_missions),
             "competition": competition.copy_for_save(getattr(self, "competition", None)),
             "cat": {
                 "name": self.cat.name,
@@ -753,7 +762,7 @@ class Game:
         shop.run()
 
     def open_minigame(self):
-        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active).run()
+        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active, on_activity=self._record_daily_activity).run()
 
     def open_competition(self):
         self.panel_open = False
@@ -824,6 +833,13 @@ class Game:
         self.panel_open = False
         self.left_panel_open = False
         AlbumUI(self.screen, self.play_click_sound).run()
+
+    def _record_daily_activity(self, activity):
+        self.daily_missions, changed = daily_missions.record(self.daily_missions, activity)
+        if changed and daily_missions.completed(self.daily_missions):
+            self.toast_text = "오늘의 일일 목표를 모두 달성했습니다!"
+            self.toast_timer = 2.5
+        return changed
 
     def _prepare_daily_event(self):
         previous_day = self.daily_events["day"]
@@ -944,6 +960,7 @@ class Game:
             [line for line in lines if line not in self._dialogue_history] or list(lines)
         ))
         self.cat_dialogue_timer = 2.5
+        self._record_daily_activity("special")
         self._start_cat_reaction({"quiet": "calm", "groom": "clean", "hide": "play", "cuddle": "sleep"}[action])
         self.toast_text = f"특별 돌봄 완료 / 친밀도 {result['friendship']:+d}"
         self.toast_timer = 2.0
@@ -1068,6 +1085,7 @@ class Game:
         self.inventory[item] -= 1
         self.cat._clamp_all()
         self._record_care_friendship(action, before)
+        self._record_daily_activity(action)
         self._start_cat_reaction(action)
         self.cat_dialogue_text = self._remember_cat_line(
             self.cat.care_reaction(action, previous_mood, recent=self._dialogue_history)
@@ -1104,6 +1122,7 @@ class Game:
         self.state.money -= price
 
         self.inventory[inventory_item] = self.inventory.get(inventory_item, 0) + 1
+        self._record_daily_activity("buy")
 
         if self.ach:
             self.ach.on_event("item_bought")
@@ -1168,6 +1187,7 @@ class Game:
         self._cat_click_count = max(0, safe_int(getattr(self, "_cat_click_count", 0), 0)) + 1
         self.cat_dialogue_text = self._cat_dialogue_line()
         self._start_cat_reaction("click")
+        mission_changed = self._record_daily_activity("pet")
         self.cat_dialogue_timer = 2.2
 
         friendship_recorded = not self.friendship_used["pet"]
@@ -1183,7 +1203,7 @@ class Game:
             self._cat_image_stage = None
             self._cat_display_image = None
             self._cat_display_body_rect = None
-        if friendship_recorded or image_changed:
+        if friendship_recorded or image_changed or mission_changed:
             save.save_game(self.make_save_data())
         return True
 
@@ -1253,6 +1273,7 @@ class Game:
                     before = getattr(self.cat, CARE_STAT_KEYS[key])
                     getattr(self.cat, actions[index])()
                     self._record_care_friendship(key, before)
+                    self._record_daily_activity(key)
                     self._start_cat_reaction(key)
                     self.cat_dialogue_text = self._remember_cat_line(
                         self.cat.care_reaction(key, previous_mood, recent=self._dialogue_history)
@@ -1940,7 +1961,26 @@ class Game:
             result = self.daily_events.get("result") or {}
             y = self._draw_wrapped_text(result.get("message", "선택한 결과가 기록되었습니다."), (20, 158), 360)
             self._draw_wrapped_text(self._daily_result_text(), (20, y), 360)
+        self._draw_daily_missions()
         self.draw_button(pygame.Rect(120, 530, 160, 34), "닫기 (ESC)", self.panel_font)
+
+    def _daily_mission_rect(self, index):
+        return pygame.Rect(20, 292 + index * 64, 360, 56)
+
+    def _draw_daily_missions(self):
+        self.screen.blit(self.big_font.render("일일 목표", True, (30, 30, 30)), (20, 260))
+        for index, goal in enumerate(self.daily_missions["goals"]):
+            rect = self._daily_mission_rect(index)
+            done = goal["progress"] >= goal["target"]
+            pygame.draw.rect(self.screen, (215, 235, 215) if done else (230, 230, 230), rect, border_radius=5)
+            pygame.draw.rect(self.screen, (70, 70, 70), rect, 1, border_radius=5)
+            label = f"{daily_missions.LABELS[goal['id']]} {goal['target']}회"
+            self.screen.blit(self.panel_font.render(label, True, (35, 35, 35)), (rect.x + 10, rect.y + 5))
+            progress = f"{goal['progress']}/{goal['target']}" + (" · 완료" if done else "")
+            self.screen.blit(self.hint_font.render(progress, True, (70, 70, 70)), (rect.x + 10, rect.y + 25))
+            bar = pygame.Rect(rect.x + 10, rect.y + 46, 220, 5)
+            pygame.draw.rect(self.screen, (195, 195, 195), bar)
+            pygame.draw.rect(self.screen, (80, 145, 100), (bar.x, bar.y, round(bar.width * goal["progress"] / goal["target"]), bar.height))
 
     def draw_special_care(self):
         self._draw_game_view_base()

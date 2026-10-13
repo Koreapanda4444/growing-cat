@@ -14,11 +14,12 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:
-    def __init__(self, screen, state=None, ach=None, on_save=None):
+    def __init__(self, screen, state=None, ach=None, on_save=None, on_activity=None):
         self.screen = screen
         self.state = state
         self.ach = ach
         self.on_save = on_save
+        self.on_activity = on_activity
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -122,6 +123,8 @@ class MiniGameScreen:
         if not isinstance(result, dict) or result.get("cancelled"):
             return
 
+        if self.on_activity:
+            self.on_activity("minigame")
         if self.ach:
             self.ach.on_event("minigame_played")
         coins = self._scaled_result_coins(result)
