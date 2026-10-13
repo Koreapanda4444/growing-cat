@@ -72,6 +72,7 @@ def new_competition_data() -> dict:
         "last_entered_day": 0,
         "trophies": {},
         "history": [],
+        "streak": 0, "best_streak": 0, "goals": [],
     }
 
 
@@ -100,6 +101,8 @@ def normalize_competition_data(value) -> dict:
             data["trophies"][comp_id] = {
                 "best_grade": best_grade,
                 "count": count,
+                "wins": min(count, _number(trophy.get("wins", 0))),
+                "best_score": min(120, _number(trophy.get("best_score", 0))),
             }
 
     history = value.get("history", [])
@@ -109,7 +112,44 @@ def normalize_competition_data(value) -> dict:
             if normalized is not None:
                 data["history"].append(normalized)
 
+    for comp in COMPETITIONS:
+        entries = [entry for entry in data["history"] if entry["id"] == comp["id"]]
+        if not entries:
+            continue
+        trophy = data["trophies"].setdefault(comp["id"], {"best_grade": "", "count": 0, "wins": 0, "best_score": 0})
+        trophy["count"] = max(trophy["count"], len(entries))
+        trophy["wins"] = max(trophy["wins"], sum(entry["grade"] == "S" for entry in entries))
+        trophy["best_score"] = max(trophy["best_score"], max(entry["score"] for entry in entries))
+        trophy["best_grade"] = min([entry["grade"] for entry in entries] + ([trophy["best_grade"]] if trophy["best_grade"] else []), key=GRADE_RANK.get)
+    trailing = 0
+    for entry in reversed(data["history"]):
+        if entry["grade"] != "S":
+            break
+        trailing += 1
+    data["streak"] = _number(value.get("streak", trailing))
+    data["best_streak"] = max(data["streak"], _number(value.get("best_streak", 0)))
+    data["goals"] = achieved_goals(data)
     return data
+
+
+def _number(value):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def achieved_goals(data):
+    wins = sum(trophy["wins"] for trophy in data["trophies"].values())
+    return [label for label, done in (("누적 5승", wins >= 5), ("누적 10승", wins >= 10),
+                                    ("3연승", data["best_streak"] >= 3), ("5연승", data["best_streak"] >= 5)) if done]
+
+
+def totals(data):
+    data = normalize_competition_data(data)
+    return {"entries": sum(t["count"] for t in data["trophies"].values()),
+            "wins": sum(t["wins"] for t in data["trophies"].values()),
+            "streak": data["streak"], "best_streak": data["best_streak"]}
 
 
 def _normalize_history_entry(entry) -> dict | None:
@@ -283,11 +323,17 @@ def entered_today(data, day: int) -> bool:
 
 def record_result(data, *, day: int, comp: dict, grade: str, score: int, reward: int) -> dict:
     normalized = normalize_competition_data(data)
+    if normalized["last_entered_day"] == day:
+        return normalized
     comp_id = comp["id"]
     normalized["last_entered_day"] = max(1, int(day))
 
-    trophy = normalized["trophies"].get(comp_id, {"best_grade": "", "count": 0})
+    trophy = normalized["trophies"].get(comp_id, {"best_grade": "", "count": 0, "wins": 0, "best_score": 0})
     trophy["count"] = max(0, int(trophy.get("count", 0))) + 1
+    trophy["wins"] += int(grade == "S")
+    trophy["best_score"] = max(trophy["best_score"], min(120, max(0, int(score))))
+    normalized["streak"] = normalized["streak"] + 1 if grade == "S" else 0
+    normalized["best_streak"] = max(normalized["best_streak"], normalized["streak"])
     best_grade = str(trophy.get("best_grade", "")).upper()
     if best_grade not in GRADE_RANK or GRADE_RANK[grade] < GRADE_RANK[best_grade]:
         trophy["best_grade"] = grade
@@ -302,6 +348,7 @@ def record_result(data, *, day: int, comp: dict, grade: str, score: int, reward:
         "reward": max(0, int(reward)),
     })
     normalized["history"] = normalized["history"][-HISTORY_LIMIT:]
+    normalized["goals"] = achieved_goals(normalized)
     return normalized
 
 

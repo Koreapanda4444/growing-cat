@@ -176,7 +176,8 @@ class CompetitionUI:
         pygame.draw.rect(self.screen, (252, 252, 252), rect)
         pygame.draw.rect(self.screen, BORDER, rect, 1)
 
-        self.screen.blit(self.font.render("트로피", True, (0, 0, 0)), (rect.x + 14, rect.y + 10))
+        summary = competition.totals(self.competition_data)
+        self.screen.blit(self.small_font.render(f"트로피 · {summary['wins']}승 / 연승 {summary['streak']} (최고 {summary['best_streak']})", True, (0, 0, 0)), (rect.x + 14, rect.y + 10))
         trophies = self.competition_data.get("trophies", {})
         if not trophies:
             self.screen.blit(self.small_font.render("아직 획득한 트로피가 없습니다.", True, (80, 80, 80)), (rect.x + 14, rect.y + 42))
