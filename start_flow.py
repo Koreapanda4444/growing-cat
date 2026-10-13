@@ -1,7 +1,7 @@
 import os
 import pygame
 
-from pg_utils import load_image, solid_surface
+from pg_utils import cached_image as load_image, solid_surface
 
 
 def get_korean_font(size: int) -> pygame.font.Font:

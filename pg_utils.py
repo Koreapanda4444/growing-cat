@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Optional, Tuple
+from functools import lru_cache
+import os
 
 import pygame
 
@@ -42,6 +44,23 @@ def load_image(
         return surf
     except (OSError, TypeError, ValueError, pygame.error):
         return None
+
+
+@lru_cache(maxsize=64)
+def _cached_image(path, size, smooth, alpha, display_format):
+    return load_image(path, size=size, smooth=smooth, alpha=alpha)
+
+
+def cached_image(path, *, size=None, smooth=True, alpha=True):
+    """정적 에셋을 공유합니다. Surface를 수정할 때는 copy()를 사용하세요."""
+    display = pygame.display.get_surface()
+    display_format = (display.get_bitsize(), display.get_masks()) if display is not None else None
+    return _cached_image(os.path.abspath(path), tuple(size) if size is not None else None,
+                         smooth, alpha, display_format)
+
+
+def clear_image_cache():
+    _cached_image.cache_clear()
 
 
 def solid_surface(size: Size, color: Tuple[int, int, int], *, alpha: bool = False) -> pygame.Surface:

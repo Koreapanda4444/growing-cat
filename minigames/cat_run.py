@@ -3,7 +3,7 @@ import random
 import sys
 
 from config import asset_path
-from pg_utils import screen_events, load_font, load_image, solid_surface
+from pg_utils import screen_events, load_font, cached_image as load_image, solid_surface
 import state as game_state
 
 FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")

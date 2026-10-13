@@ -206,9 +206,10 @@ class AlbumUI:
         return pygame.transform.smoothscale(image, size)
 
     def _thumbnail(self, path):
-        cached = self.thumb_cache.get(path)
-        if cached is not None:
-            return cached
+        if path in self.thumb_cache:
+            return self.thumb_cache[path]
+        if len(self.thumb_cache) >= 64:
+            self.thumb_cache.pop(next(iter(self.thumb_cache)))
         image = self._load_image(path)
         if image is None:
             self.thumb_cache[path] = None
@@ -218,9 +219,10 @@ class AlbumUI:
         return thumb
 
     def _full_image(self, path):
-        cached = self.full_cache.get(path)
-        if cached is not None:
-            return cached
+        if path in self.full_cache:
+            return self.full_cache[path]
+        if len(self.full_cache) >= 8:
+            self.full_cache.pop(next(iter(self.full_cache)))
         image = self._load_image(path)
         if image is None:
             self.full_cache[path] = None

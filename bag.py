@@ -2,7 +2,7 @@ import pygame
 
 from config import asset_path
 from items import get_item_info
-from pg_utils import screen_events, GameQuit, load_font, load_image
+from pg_utils import screen_events, GameQuit, load_font, cached_image as load_image
 
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
@@ -79,7 +79,10 @@ class BagUI:
 
     def change_page(self, delta):
         last = max(0, (self.item_count() - 1) // 4)
-        self.page = max(0, min(last, self.page + delta))
+        page = max(0, min(last, self.page + delta))
+        if self.page != page:
+            self.item_rects.clear()
+        self.page = page
 
     def draw_pagination(self):
         self.change_page(0)
@@ -140,6 +143,7 @@ class BagUI:
             self.item_rects.append((icon_rect, item_id))
 
     def draw(self):
+        self.change_page(0)
         self.screen.fill(BG_COLOR)
         self.draw_top()
         self.draw_items()

@@ -20,7 +20,7 @@ import minigame_challenges
 import growth_records
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
-from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
+from pg_utils import GameQuit, load_font, cached_image as load_image, load_sound, play_music
 from achievements import AchievementsManager, draw_toasts
 from achievements_ui import AchievementsUI
 from pathlib import Path

@@ -3,7 +3,7 @@ import state as game_state
 
 from config import asset_path
 from items import get_shop_categories
-from pg_utils import screen_events, GameQuit, load_font, load_image
+from pg_utils import screen_events, GameQuit, load_font, cached_image as load_image
 
 BG_COLOR = (245, 245, 245)
 PANEL_COLOR = (230, 230, 230)
@@ -85,16 +85,19 @@ class ShopUI:
                         self.play_click_sound()
                     self.active_tab = "FOOD"
                     self.page = 0
+                    self.item_rects.clear()
                 elif self.tab_toy.collidepoint(event.pos):
                     if self.play_click_sound:
                         self.play_click_sound()
                     self.active_tab = "TOY"
                     self.page = 0
+                    self.item_rects.clear()
                 elif self.tab_evolution.collidepoint(event.pos):
                     if self.play_click_sound:
                         self.play_click_sound()
                     self.active_tab = "EVOLUTION"
                     self.page = 0
+                    self.item_rects.clear()
 
                 for rect, item in self.item_rects:
                     if rect.collidepoint(event.pos):
@@ -116,7 +119,10 @@ class ShopUI:
 
     def change_page(self, delta):
         last = max(0, (self.item_count() - 1) // 4)
-        self.page = max(0, min(last, self.page + delta))
+        page = max(0, min(last, self.page + delta))
+        if self.page != page:
+            self.item_rects.clear()
+        self.page = page
 
     def draw_pagination(self):
         self.change_page(0)
@@ -191,6 +197,7 @@ class ShopUI:
             self.item_rects.append((icon_rect, item))
 
     def draw(self):
+        self.change_page(0)
         self.screen.fill(BG_COLOR)
         self.draw_top()
         self.draw_tabs()
