@@ -2,6 +2,7 @@ import random
 from copy import deepcopy
 
 import state
+import evolution
 from items import ITEM_INFO
 
 
@@ -42,6 +43,58 @@ EVENTS.update({
 })
 for event_id, kind in (("sunbeam", "positive"), ("box", "positive"), ("window", "neutral")):
     EVENTS[event_id]["kind"] = kind
+EVENTS.update({
+    "tiny_paws": {"title": "작은 발의 첫 탐색", "kind": "positive", "min_day": 2, "stages": (evolution.BABY,), "once": True,
+                  "text": ("작은 발로 방 안을 탐색하기 시작했습니다.", "새로운 경험을 함께해 줄까요?"), "choices": (
+        {"label": "천천히 길을 알려주기", "stats": {"happiness": 4, "tiredness": 2}, "friendship": 3, "message": "작은 발걸음을 함께 지켜봤습니다."},
+        {"label": "곁에서 편히 쉬게 하기", "stats": {"tiredness": -3}, "friendship": 2, "message": "낯선 공간에서도 안심하고 쉬었습니다."},
+    )},
+    "adult_walk": {"title": "의젓한 산책 준비", "kind": "neutral", "min_day": 7, "stages": (evolution.ADULT,),
+                   "text": ("성묘가 된 고양이가 익숙한 길을 둘러봅니다.", "오늘은 조금 의젓해 보입니다."), "choices": (
+        {"label": "방 안을 함께 둘러보기", "stats": {"happiness": 3, "tiredness": 2}, "friendship": 2, "message": "익숙한 공간을 함께 탐색했습니다."},
+        {"label": "좋아하는 자리에서 쉬기", "stats": {"tiredness": -3}, "friendship": 2, "message": "익숙한 자리에서 여유를 즐겼습니다."},
+    )},
+    "lion_pride": {"title": "근사한 갈기", "kind": "positive", "min_day": 21, "stages": (evolution.LION,), "once": True,
+                   "text": ("사자고양이가 갈기를 멋지게 펼칩니다.", "달라진 모습에 자신감이 느껴집니다."), "choices": (
+        {"label": "근사한 모습을 칭찬하기", "stats": {"happiness": 5, "tiredness": 2}, "friendship": 3, "message": "칭찬을 듣고 갈기를 뽐냈습니다."},
+        {"label": "갈기를 부드럽게 정돈하기", "stats": {"cleanliness": 4}, "friendship": 2, "message": "갈기를 함께 정돈했습니다."},
+    )},
+    "dino_steps": {"title": "조심스러운 큰 발걸음", "kind": "neutral", "min_day": 35, "stages": (evolution.DINO,),
+                   "text": ("공룡고양이가 큰 몸으로 조심히 움직입니다.", "널찍한 자리가 필요해 보입니다."), "choices": (
+        {"label": "함께 천천히 움직이기", "stats": {"happiness": 4, "tiredness": 3}, "friendship": 3, "message": "큰 발걸음의 속도를 함께 맞췄습니다."},
+        {"label": "편히 쉴 자리를 마련하기", "stats": {"tiredness": -4}, "friendship": 2, "message": "몸을 편히 누일 자리를 찾았습니다."},
+    )},
+    "energetic_secret": {"title": "우리만의 달리기", "kind": "positive", "min_day": 3, "personality": "energetic", "min_friendship": 100,
+                         "text": ("활발한 고양이가 익숙한 눈빛을 보냅니다.", "함께하는 놀이가 기다려지는 것 같습니다."), "choices": (
+        {"label": "짧게 함께 달리기", "stats": {"happiness": 5, "tiredness": 3}, "friendship": 3, "message": "서로의 속도를 맞춰 신나게 놀았습니다."},
+        {"label": "쉬면서 눈인사하기", "stats": {"tiredness": -2, "happiness": 2}, "friendship": 2, "message": "놀이를 약속하고 잠시 쉬었습니다."},
+    )},
+    "calm_observe": {"title": "말없이 통하는 시간", "kind": "neutral", "min_day": 3, "personality": "calm", "min_friendship": 100,
+                     "text": ("차분한 고양이가 조용히 옆자리를 내줍니다.", "말없이도 편안함이 전해집니다."), "choices": (
+        {"label": "창밖을 함께 바라보기", "stats": {"happiness": 3, "tiredness": -2}, "friendship": 3, "message": "나란히 앉아 편안한 시간을 보냈습니다."},
+        {"label": "털을 천천히 정돈하기", "stats": {"cleanliness": 4}, "friendship": 2, "message": "차분한 손길로 털을 정돈했습니다."},
+    )},
+    "lazy_nap": {"title": "가장 포근한 옆자리", "kind": "neutral", "min_day": 3, "personality": "lazy", "min_friendship": 100,
+                 "text": ("냥냥한 고양이가 옆에서 기대어 눕습니다.", "익숙한 손길에 눈이 스르르 감깁니다."), "choices": (
+        {"label": "나란히 편히 쉬기", "stats": {"tiredness": -5, "hunger": 1}, "friendship": 3, "message": "포근한 옆자리에서 쉬었습니다."},
+        {"label": "살며시 쓰다듬어 주기", "stats": {"happiness": 3}, "friendship": 2, "message": "익숙한 손길에 작게 골골거렸습니다."},
+    )},
+    "trusted_friend": {"title": "믿음의 눈인사", "kind": "positive", "min_day": 7, "min_friendship": 300, "once": True,
+                       "text": ("고양이가 먼저 다가와 눈을 맞춥니다.", "함께 쌓아 온 믿음이 느껴집니다."), "choices": (
+        {"label": "천천히 눈인사하기", "stats": {"happiness": 5}, "friendship": 4, "message": "서로의 마음을 눈인사로 나눴습니다."},
+        {"label": "편안한 손길로 돌보기", "stats": {"cleanliness": 3}, "friendship": 4, "message": "익숙한 손길에 편히 몸을 맡겼습니다."},
+    )},
+    "first_week": {"title": "함께한 첫 일주일", "kind": "positive", "min_day": 7, "once": True,
+                   "text": ("함께 지낸 시간이 일주일을 넘었습니다.", "작은 일상이 추억이 되어 갑니다."), "choices": (
+        {"label": "기념 동전 챙기기", "coins": 6, "friendship": 2, "message": "첫 일주일의 작은 기념을 남겼습니다."},
+        {"label": "다음 식사 준비하기", "items": {"사료": 1}, "friendship": 2, "message": "앞으로의 일상을 위해 사료를 챙겼습니다."},
+    )},
+    "first_month": {"title": "함께한 한 달", "kind": "positive", "min_day": 30, "once": True,
+                    "text": ("함께 지낸 시간이 한 달을 넘었습니다.", "고양이는 이제 일상의 소중한 친구입니다."), "choices": (
+        {"label": "추억의 동전 챙기기", "coins": 8, "friendship": 2, "message": "한 달의 추억을 작은 기념으로 남겼습니다."},
+        {"label": "익숙한 실 장난감 챙기기", "items": {"실": 1}, "friendship": 2, "message": "익숙한 실 장난감으로 새 추억을 준비합니다."},
+    )},
+})
 KIND_LABELS = {"positive": "좋은 일", "negative": "작은 소동", "neutral": "평범한 일"}
 HISTORY_LIMIT = 12
 STAT_KEYS = ("hunger", "tiredness", "happiness", "cleanliness")
@@ -55,7 +108,7 @@ def _int(value, default=0):
 
 
 def new_data():
-    return {"day": 0, "event": None, "status": "none", "choice": None, "result": None, "completed": 0, "history": []}
+    return {"day": 0, "event": None, "status": "none", "choice": None, "result": None, "completed": 0, "history": [], "seen": []}
 
 
 def normalize(value):
@@ -86,15 +139,36 @@ def normalize(value):
         data["history"].append({"day": data["day"], "event": event_id, "choice": data["choice"], "result": deepcopy(data["result"])})
         data["history"] = data["history"][-HISTORY_LIMIT:]
         data["completed"] += 1
+    seen = value.get("seen", [])
+    if isinstance(seen, list):
+        data["seen"] = sorted({event for event in seen if isinstance(event, str) and event in EVENTS})
+    known = {entry["event"] for entry in data["history"]}
+    if data["event"]:
+        known.add(data["event"])
+    data["seen"] = sorted(set(data["seen"]) | known)
     return data
+
+
+def eligible_events(cat, day, data):
+    seen = set(data.get("seen", []))
+    return [event_id for event_id, event in EVENTS.items()
+            if day >= event.get("min_day", 1)
+            and cat.stage in event.get("stages", evolution.EVOLUTION_ORDER)
+            and cat.personality == event.get("personality", cat.personality)
+            and cat.friendship >= event.get("min_friendship", 0)
+            and not (event.get("once") and event_id in seen)]
 
 
 def roll_for_day(data, day, cat):
     data = normalize(data)
     if data["day"] >= day:
         return data
-    weights = [2 if event["kind"] == "negative" else 3 for event in EVENTS.values()]
-    event_id = random.choices(list(EVENTS), weights=weights, k=1)[0] if random.random() < EVENT_CHANCE else None
+    eligible = eligible_events(cat, day, data)
+    counts = {kind: sum(EVENTS[event]["kind"] == kind for event in eligible) for kind in KIND_LABELS}
+    weights = [(2 if EVENTS[event]["kind"] == "negative" else 3) / counts[EVENTS[event]["kind"]] for event in eligible]
+    event_id = random.choices(eligible, weights=weights, k=1)[0] if eligible and random.random() < EVENT_CHANCE else None
+    if event_id and event_id not in data["seen"]:
+        data["seen"].append(event_id)
     return {**data, "day": day, "event": event_id, "status": "pending" if event_id else "none", "choice": None, "result": None}
 
 
