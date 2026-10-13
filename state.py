@@ -252,6 +252,48 @@ def friendship_progress(value):
         return label, target, (value - start) / (target - start)
 
 
+SPECIAL_CARE = {
+    "quiet": {"label": "조용히 곁에 있기", "preferred": "calm", "moods": ("lonely",),
+              "effects": {"happiness": 4, "tiredness": -3},
+              "lines": ("말없이 있어도 마음이 편하다냥.", "함께 있는 것만으로 좋다냥.")},
+    "groom": {"label": "부드럽게 빗질하기", "preferred": "calm", "moods": ("uncomfortable",),
+              "effects": {"cleanliness": 8, "happiness": 2, "tiredness": 1},
+              "lines": ("엉킨 털이 풀렸다냥.", "빗질하는 손길이 부드럽다냥.")},
+    "hide": {"label": "숨바꼭질하기", "preferred": "energetic", "moods": ("lonely", "happy"),
+             "effects": {"happiness": 9, "tiredness": 5, "hunger": 3, "cleanliness": -2},
+             "lines": ("찾았다냥! 다음에는 내가 숨겠다냥.", "숨어도 네 발소리는 안다냥!")},
+    "cuddle": {"label": "포근하게 기대 쉬기", "preferred": "lazy", "moods": ("tired",),
+               "effects": {"tiredness": -7, "happiness": 3, "hunger": 2},
+               "lines": ("포근한 자리에서 쉬겠다냥.", "네 옆이 가장 따뜻하다냥.")},
+}
+SPECIAL_REPEAT_FACTORS = (1.0, 0.85, 0.70, 0.55)
+
+
+def normalize_special_care(value, day):
+    data = {"day": day, "used": False, "last_action": "", "last_used_day": 0, "repeat_count": 0}
+    if not isinstance(value, dict):
+        return data
+    action = value.get("last_action")
+    if not isinstance(action, str) or action not in SPECIAL_CARE:
+        return data
+    try:
+        last_day = int(value.get("last_used_day", 0))
+        count = max(0, min(4, int(value.get("repeat_count", 0))))
+    except (TypeError, ValueError, OverflowError):
+        return data
+    if not 1 <= last_day <= day or not count:
+        return data
+    data.update(last_action=action, last_used_day=last_day, repeat_count=count)
+    data["used"] = last_day == day
+    return data
+
+
+def special_care_repetition(data, action, day):
+    if data["last_action"] == action and data["last_used_day"] == day - 1:
+        return min(4, data["repeat_count"] + 1)
+    return 1
+
+
 def normalize_difficulty(difficulty: str | None) -> str:
     value = str(difficulty or DIFFICULTY_NORMAL).strip().lower()
     if value not in DIFFICULTY_PROFILE:

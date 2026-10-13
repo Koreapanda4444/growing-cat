@@ -134,6 +134,36 @@ class Cat:
         preferred = state.get_personality_profile(self.personality)["preferred_action"] == action
         return 2 + int(needed) + int(preferred)
 
+    def special_care_preview(self, action, repetition=1):
+        if action not in state.SPECIAL_CARE or not self._can_act() or self.check_game_over():
+            return {"allowed": False, "stats": {}, "friendship": 0}
+        info = state.SPECIAL_CARE[action]
+        factor = state.SPECIAL_REPEAT_FACTORS[max(0, min(3, repetition - 1))]
+        changes = {}
+        for stat, amount in info["effects"].items():
+            beneficial = (amount < 0) if stat in ("hunger", "tiredness") else (amount > 0)
+            kind = "recovery" if beneficial else "pressure"
+            scaled = state.scaled_range((abs(amount), abs(amount)), self.difficulty, kind)[0]
+            delta = max(1, int(round(scaled * factor))) * (1 if amount > 0 else -1)
+            changes[stat] = state.clamp(getattr(self, stat) + delta) - getattr(self, stat)
+        values = {stat: getattr(self, stat) + changes.get(stat, 0) for stat in ("hunger", "tiredness", "happiness", "cleanliness")}
+        allowed = (values["hunger"] < 100 and values["tiredness"] < 100
+                   and values["happiness"] > 0 and values["cleanliness"] > 0
+                   and not (action == "hide" and (self.hunger >= 70 or self.tiredness >= 70)))
+        useful = any(delta < 0 if stat in ("hunger", "tiredness") else delta > 0 for stat, delta in changes.items())
+        bond = 2 + int(self.personality == info["preferred"]) + int(self.mood in info["moods"])
+        friendship = max(1, int(bond * factor)) if allowed and useful else 0
+        return {"allowed": allowed, "stats": changes, "friendship": friendship}
+
+    def apply_special_care(self, action, repetition=1):
+        result = self.special_care_preview(action, repetition)
+        if not result["allowed"]:
+            return result
+        for stat, delta in result["stats"].items():
+            setattr(self, stat, getattr(self, stat) + delta)
+        result["friendship"] = self.change_friendship(result["friendship"])
+        return result
+
     def _get_personality_modifier(self, stat_type: str, action=None) -> float:
         profile = state.get_personality_profile(self.personality)
         overrides = profile.get("care_modifiers", {}).get(action, {})

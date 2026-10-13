@@ -66,7 +66,7 @@ CAT_IMAGE_LAYOUT_OVERRIDES = {
     "lion_cat4.png": {"offset": (-10, 0), "bottom": BOTTOM_BTN_Y - 5, "max_size": (210, 135)},
 }
 
-CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
+CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화", "특별 돌봄")
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
 CARE_STAT_KEYS = {"feed": "hunger", "play": "happiness", "clean": "cleanliness", "sleep": "tiredness"}
 FRIENDSHIP_ACTION_KEYS = (*CARE_ACTION_KEYS, "pet")
@@ -347,6 +347,7 @@ class Game:
         self.scene = "MAIN"
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
+        self.special_care = state.normalize_special_care(None, self.state.day)
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -419,6 +420,7 @@ class Game:
             }
         else:
             self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
+        self.special_care = state.normalize_special_care(data.get("special_care"), self.state.day)
         self.competition = competition.normalize_competition_data(data.get("competition"))
         self.scene = "MAIN"
         self.check_game_over()
@@ -492,6 +494,7 @@ class Game:
         self.competition = competition.new_competition_data()
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
+        self.special_care = state.normalize_special_care(None, self.state.day)
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -515,6 +518,7 @@ class Game:
         if not self.cat or self.scene != "MAIN" or self.cat.check_game_over():
             return
         phase = self.state.advance_time()
+        self.special_care = state.normalize_special_care(self.special_care, self.state.day)
         if phase == state.NIGHT:
             self.cat.on_night()
         else:
@@ -687,6 +691,7 @@ class Game:
                 "phase": clean_phase,
                 "used": {key: bool(self.friendship_used.get(key, False)) for key in FRIENDSHIP_ACTION_KEYS},
             },
+            "special_care": state.normalize_special_care(self.special_care, clean_day),
             "competition": competition.copy_for_save(getattr(self, "competition", None)),
             "cat": {
                 "name": self.cat.name,
@@ -806,6 +811,64 @@ class Game:
         self.left_panel_open = False
         self.scene = "EVOLVE_MENU"
         self.evolve_menu_timer = 0
+
+    def open_special_care(self):
+        if not self.cat or self.cat.check_game_over():
+            return
+        self.special_care = state.normalize_special_care(self.special_care, self.state.day)
+        self.panel_open = False
+        self.left_panel_open = False
+        self.scene = "SPECIAL_CARE"
+
+    def _special_care_choices(self):
+        choices = list(state.SPECIAL_CARE)
+        choices.sort(key=lambda action: (
+            not self._special_care_preview(action)["allowed"],
+            self.cat.mood not in state.SPECIAL_CARE[action]["moods"],
+            self.cat.personality != state.SPECIAL_CARE[action]["preferred"],
+        ))
+        return choices
+
+    def _special_care_preview(self, action):
+        repetition = state.special_care_repetition(self.special_care, action, self.state.day)
+        return self.cat.special_care_preview(action, repetition)
+
+    def choose_special_care(self, action):
+        if self.scene != "SPECIAL_CARE" or not self.cat or action not in state.SPECIAL_CARE:
+            return False
+        self.special_care = state.normalize_special_care(self.special_care, self.state.day)
+        if self.special_care["used"]:
+            return False
+        repetition = state.special_care_repetition(self.special_care, action, self.state.day)
+        result = self.cat.apply_special_care(action, repetition)
+        if not result["allowed"]:
+            return False
+        self.special_care = {"day": self.state.day, "used": True, "last_action": action,
+                             "last_used_day": self.state.day, "repeat_count": repetition}
+        lines = state.SPECIAL_CARE[action]["lines"]
+        self.cat_dialogue_text = self._remember_cat_line(random.choice(
+            [line for line in lines if line not in self._dialogue_history] or list(lines)
+        ))
+        self.cat_dialogue_timer = 2.5
+        self.toast_text = f"특별 돌봄 완료 / 친밀도 {result['friendship']:+d}"
+        self.toast_timer = 2.0
+        self.scene = "MAIN"
+        save.save_game(self.make_save_data())
+        return True
+
+    def _special_care_card_rect(self, index):
+        return pygame.Rect(35, 203 + index * 64, 330, 56)
+
+    def handle_click_special_care(self, pos):
+        if pygame.Rect(130, 483, 140, 34).collidepoint(pos):
+            self.play_click_sound()
+            self.scene = "MAIN"
+            return
+        for index, action in enumerate(self._special_care_choices()):
+            if self._special_care_card_rect(index).collidepoint(pos):
+                self.play_click_sound()
+                self.choose_special_care(action)
+                return
 
     def get_evolve_menu_info(self):
         stage = getattr(self.cat, "stage", None)
@@ -1107,6 +1170,10 @@ class Game:
             self.play_click_sound()
             self.open_evolve_menu()
             return True
+        if self._panel_button_rect(panel_x, evolve_index + 1).collidepoint(pos):
+            self.play_click_sound()
+            self.open_special_care()
+            return True
 
         return False
 
@@ -1156,6 +1223,10 @@ class Game:
         if self.app_mode != "GAME" or self.scene == "GAME_OVER":
             return False
 
+        if (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+                and self.scene in ("EVOLVE_MENU", "SPECIAL_CARE") and not self.paused):
+            return False
+
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.paused = not self.paused
             return True
@@ -1199,7 +1270,11 @@ class Game:
                 self.restart_game()
                 return True
 
-        if self.scene == "EVOLVE_MENU" and event.key == pygame.K_ESCAPE:
+        if self.scene == "SPECIAL_CARE" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
+            self.choose_special_care(self._special_care_choices()[event.key - pygame.K_1])
+            return True
+
+        if self.scene in ("EVOLVE_MENU", "SPECIAL_CARE") and event.key == pygame.K_ESCAPE:
             self.scene = "MAIN"
             return True
 
@@ -1212,6 +1287,8 @@ class Game:
             self.handle_click_main(event.pos)
         elif self.scene == "EVOLVE_MENU":
             self.handle_click_evolve_menu(event.pos)
+        elif self.scene == "SPECIAL_CARE" and event.button == 1:
+            self.handle_click_special_care(event.pos)
 
     def update(self, dt: float):
         if self.toast_timer > 0.0:
@@ -1615,6 +1692,11 @@ class Game:
             self.draw_button(self._panel_button_rect(panel_x, index), label, self.panel_font)
 
     def draw(self):
+        if self.scene == "SPECIAL_CARE":
+            self.draw_special_care()
+            self._finish_frame()
+            return
+
         if self.scene == "EVOLVE":
             self.draw_evolve()
             self._finish_frame()
@@ -1635,6 +1717,38 @@ class Game:
         self._draw_menu_panel()
         self.draw_button(self._advance_rect(), "다음 시간", self.tab_font)
         self._finish_frame()
+
+    def draw_special_care(self):
+        self._draw_game_view_base()
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        self.screen.blit(overlay, (0, 0))
+        panel = pygame.Rect(20, 115, 360, 420)
+        pygame.draw.rect(self.screen, (245, 245, 245), panel, border_radius=12)
+        pygame.draw.rect(self.screen, (60, 60, 60), panel, 2, border_radius=12)
+        title = self.big_font.render("특별 돌봄", True, (30, 30, 30))
+        self.screen.blit(title, title.get_rect(center=(200, 140)))
+        self.screen.blit(self.hint_font.render("하루 한 번 / 같은 선택 연속 시 효과 감소", True, (70, 70, 70)), (35, 165))
+        mood_label = state.MOOD_PROFILE[self.cat.mood]["label"]
+        self.screen.blit(self.hint_font.render(f"기분: {mood_label} / 숫자 1~4로도 선택", True, (70, 70, 70)), (35, 184))
+        names = {"hunger": "배고픔", "tiredness": "피로", "happiness": "행복", "cleanliness": "청결"}
+        for index, action in enumerate(self._special_care_choices()):
+            info = state.SPECIAL_CARE[action]
+            result = self._special_care_preview(action)
+            enabled = not self.special_care["used"] and result["allowed"]
+            rect = self._special_care_card_rect(index)
+            pygame.draw.rect(self.screen, (220, 235, 220) if enabled else (220, 220, 220), rect, border_radius=5)
+            pygame.draw.rect(self.screen, (70, 70, 70), rect, 1, border_radius=5)
+            recommended = enabled and (self.cat.mood in info["moods"] or self.cat.personality == info["preferred"])
+            text = f"{index + 1}. {info['label']}" + (" · 추천" if recommended else "")
+            self.screen.blit(self.panel_font.render(text, True, (30, 30, 30) if enabled else (125, 125, 125)), (rect.x + 8, rect.y + 7))
+            effects = " / ".join(f"{names[stat]} {delta:+g}" for stat, delta in result["stats"].items())
+            if not result["allowed"]:
+                effects = "기본 돌봄으로 컨디션을 회복해 주세요."
+            self.screen.blit(self.hint_font.render(effects, True, (90, 90, 90)), (rect.x + 8, rect.y + 31))
+        status = "오늘은 이미 특별 돌봄을 했습니다." if self.special_care["used"] else "선택 즉시 적용 / 취소하면 사용하지 않습니다."
+        self.screen.blit(self.hint_font.render(status, True, (100, 60, 60)), (35, 461))
+        self.draw_button(pygame.Rect(130, 483, 140, 34), "닫기 (ESC)", self.panel_font)
 
     def draw_evolve(self):
         if not self.paused:
