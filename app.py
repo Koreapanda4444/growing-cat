@@ -2,6 +2,7 @@ import pygame
 import sys
 import os
 import random
+import math
 from cat import Cat
 import state
 from game import MiniGameScreen
@@ -356,6 +357,7 @@ class Game:
         self._cat_rect = None
         self._cat_click_count = 0
         self._dialogue_history = []
+        self._reset_cat_animation()
         if not hasattr(self.state, "minigame_used"):
             self.state.minigame_used = state.new_minigame_usage()
         self.evolve_timer = 0
@@ -503,6 +505,7 @@ class Game:
         self._cat_rect = None
         self._cat_click_count = 0
         self._dialogue_history = []
+        self._reset_cat_animation()
         self.cat_dialogue_text = ""
         self.cat_dialogue_timer = 0.0
         self.panel_open = False
@@ -850,6 +853,7 @@ class Game:
             [line for line in lines if line not in self._dialogue_history] or list(lines)
         ))
         self.cat_dialogue_timer = 2.5
+        self._start_cat_reaction({"quiet": "calm", "groom": "clean", "hide": "play", "cuddle": "sleep"}[action])
         self.toast_text = f"특별 돌봄 완료 / 친밀도 {result['friendship']:+d}"
         self.toast_timer = 2.0
         self.scene = "MAIN"
@@ -973,6 +977,7 @@ class Game:
         self.inventory[item] -= 1
         self.cat._clamp_all()
         self._record_care_friendship(action, before)
+        self._start_cat_reaction(action)
         self.cat_dialogue_text = self._remember_cat_line(
             self.cat.care_reaction(action, previous_mood, recent=self._dialogue_history)
         )
@@ -1071,6 +1076,7 @@ class Game:
         self.play_click_sound()
         self._cat_click_count = max(0, safe_int(getattr(self, "_cat_click_count", 0), 0)) + 1
         self.cat_dialogue_text = self._cat_dialogue_line()
+        self._start_cat_reaction("click")
         self.cat_dialogue_timer = 2.2
 
         friendship_recorded = not self.friendship_used["pet"]
@@ -1156,6 +1162,7 @@ class Game:
                     before = getattr(self.cat, CARE_STAT_KEYS[key])
                     getattr(self.cat, actions[index])()
                     self._record_care_friendship(key, before)
+                    self._start_cat_reaction(key)
                     self.cat_dialogue_text = self._remember_cat_line(
                         self.cat.care_reaction(key, previous_mood, recent=self._dialogue_history)
                     )
@@ -1296,8 +1303,80 @@ class Game:
         if self.cat_dialogue_timer > 0.0:
             self.cat_dialogue_timer = max(0.0, float(self.cat_dialogue_timer) - float(dt))
 
-        if self.paused:
+        if self.paused or self.scene != "MAIN" or not self.cat:
             return
+        self._cat_animation_clock += max(0.0, dt)
+        mood = self.cat.mood
+        if mood != self._cat_last_mood:
+            if self._cat_last_mood is not None and self._cat_reaction_kind is None:
+                self._start_cat_reaction(mood)
+            self._cat_last_mood = mood
+        if self._cat_reaction_kind is not None:
+            self._cat_reaction_elapsed += max(0.0, dt)
+            if self._cat_reaction_elapsed >= self._cat_reaction_duration:
+                self._cat_reaction_kind = None
+                self._cat_reaction_elapsed = 0.0
+
+    def _reset_cat_animation(self):
+        self._cat_animation_clock = 0.0
+        self._cat_reaction_kind = None
+        self._cat_reaction_elapsed = 0.0
+        self._cat_reaction_duration = 0.0
+        self._cat_last_mood = None
+        self._cat_animation_cache = {}
+
+    def _start_cat_reaction(self, kind):
+        self._cat_reaction_kind = kind
+        self._cat_reaction_elapsed = 0.0
+        self._cat_reaction_duration = 1.1 if kind in ("sleep", "tired") else 0.75
+
+    def _cat_animation_values(self):
+        if self.paused or self.scene != "MAIN":
+            return 1.0, 0.0, 0.0, 255
+        mood = self.cat.mood
+        breath = math.sin(self._cat_animation_clock * (1.8 if mood == "tired" else 2.8))
+        scale, dx, dy, alpha = 1.0 + breath * 0.008, 0.0, -max(0.0, breath), 255
+        kind = self._cat_reaction_kind
+        if kind is None:
+            return scale, dx, dy, alpha
+        progress = min(1.0, self._cat_reaction_elapsed / self._cat_reaction_duration)
+        pulse = math.sin(math.pi * progress)
+        wave = math.sin(math.tau * progress * 2)
+        if kind in ("click", "play", "happy"):
+            dy -= pulse * (7 if mood in ("happy", "calm") else 3)
+            scale += pulse * 0.025
+            if kind == "play":
+                dx = wave * 4
+        elif kind in ("feed", "calm", "lonely"):
+            scale += pulse * 0.02
+            dy -= pulse * 2
+        elif kind in ("clean", "uncomfortable", "hungry"):
+            dx = wave * 3
+            alpha -= int(pulse * 15)
+        elif kind in ("sleep", "tired"):
+            scale -= pulse * 0.025
+            alpha -= int(pulse * 35)
+        return scale, dx, dy, alpha
+
+    def _animated_cat_frame(self, image, base_rect):
+        scale, dx, dy, alpha = self._cat_animation_values()
+        area = self._cat_sprite_area()
+        width, height = image.get_size()
+        scale = min(scale, area.width / width, area.height / height)
+        size = (max(1, round(width * scale)), max(1, round(height * scale)))
+        alpha = max(220, min(255, round(alpha / 5) * 5))
+        key = (size, alpha)
+        frame = self._cat_animation_cache.get(key)
+        if frame is None:
+            if len(self._cat_animation_cache) >= 48:
+                self._cat_animation_cache.clear()
+            frame = image if size == image.get_size() and alpha == 255 else pygame.transform.smoothscale(image, size)
+            if alpha != 255:
+                frame.set_alpha(alpha)
+            self._cat_animation_cache[key] = frame
+        rect = frame.get_rect(midbottom=(round(base_rect.centerx + dx), round(base_rect.bottom + dy)))
+        rect.clamp_ip(area)
+        return frame, rect
 
     def _take_photo_toast(self):
         try:
@@ -1548,18 +1627,20 @@ class Game:
             self._cat_image_stage = cat_stage
             self._cat_image = load_image(self.cat.image_path, alpha=True)
             self._cat_display_image, self._cat_display_body_rect = self._prepare_cat_display_image(self._cat_image)
+            self._cat_animation_cache.clear()
 
         cat_img = self._cat_display_image
         if cat_img is None:
             self._cat_rect = None
             return
 
-        cat_rect = self._cat_display_rect(cat_img)
+        base_rect = self._cat_display_rect(cat_img)
+        frame, cat_rect = self._animated_cat_frame(cat_img, base_rect)
         self._cat_rect = cat_rect
-        self.screen.blit(cat_img, cat_rect)
+        self.screen.blit(frame, cat_rect)
 
         name_text = self.name_font.render(f"{self.cat.name} - {self.cat.stage}", True, (0, 0, 0))
-        name_rect = name_text.get_rect(center=(WIDTH // 2, cat_rect.top - NAME_Y_OFFSET))
+        name_rect = name_text.get_rect(center=(WIDTH // 2, base_rect.top - NAME_Y_OFFSET))
         self.screen.blit(name_text, name_rect)
 
     def _prepare_cat_display_image(self, image):
@@ -1633,10 +1714,13 @@ class Game:
             visible_rect.union_ip(rect)
         return visible_rect
 
+    def _cat_sprite_area(self):
+        bottom = self._cat_image_layout().get("bottom", CAT_AREA_BOTTOM)
+        return pygame.Rect((WIDTH - CAT_AREA_WIDTH) // 2, CAT_AREA_TOP, CAT_AREA_WIDTH, bottom - CAT_AREA_TOP)
+
     def _cat_display_rect(self, cat_img):
         layout = self._cat_image_layout()
-        area_bottom = layout.get("bottom", CAT_AREA_BOTTOM)
-        area = pygame.Rect((WIDTH - CAT_AREA_WIDTH) // 2, CAT_AREA_TOP, CAT_AREA_WIDTH, area_bottom - CAT_AREA_TOP)
+        area = self._cat_sprite_area()
         rect = cat_img.get_rect()
         body_rect = getattr(self, "_cat_display_body_rect", None)
         if body_rect is None:
