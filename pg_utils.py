@@ -53,6 +53,8 @@ def _cached_image(path, size, smooth, alpha, display_format):
 
 def cached_image(path, *, size=None, smooth=True, alpha=True):
     """정적 에셋을 공유합니다. Surface를 수정할 때는 copy()를 사용하세요."""
+    if not isinstance(path, (str, bytes, os.PathLike)) or not path:
+        return None
     display = pygame.display.get_surface()
     display_format = (display.get_bitsize(), display.get_masks()) if display is not None else None
     return _cached_image(os.path.abspath(path), tuple(size) if size is not None else None,

@@ -105,7 +105,7 @@ def normalize_competition_data(value) -> dict:
             data["trophies"][comp_id] = {
                 "best_grade": best_grade,
                 "count": count,
-                "wins": min(count, _number(trophy.get("wins", 0))),
+                "wins": min(count, max(int(best_grade == "S"), _number(trophy.get("wins", 0)))),
                 "best_score": min(120, _number(trophy.get("best_score", 0))),
             }
 
@@ -131,7 +131,12 @@ def normalize_competition_data(value) -> dict:
             break
         trailing += 1
     data["streak"] = _number(value.get("streak", trailing))
-    data["best_streak"] = max(data["streak"], _number(value.get("best_streak", 0)))
+    known_best = current = 0
+    for entry in data["history"]:
+        current = current + 1 if entry["grade"] == "S" else 0
+        known_best = max(known_best, current)
+    data["best_streak"] = max(data["streak"], known_best, _number(value.get("best_streak", 0)))
+    data["last_entered_day"] = max([data["last_entered_day"]] + [e["day"] for e in data["history"]])
     data["goals"] = achieved_goals(data)
     confirmed = sum(t["wins"] for t in data["trophies"].values()) * 5
     confirmed += sum(LEAGUE_POINTS[e["grade"]] for e in data["history"] if e["grade"] != "S")

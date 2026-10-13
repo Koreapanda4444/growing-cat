@@ -786,7 +786,11 @@ class Game:
         shop.run()
 
     def open_minigame(self):
-        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active, on_activity=self._record_daily_activity, inventory=self.inventory).run()
+        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active, on_activity=self._record_daily_activity, inventory=self.inventory, on_result=self._show_minigame_result).run()
+
+    def _show_minigame_result(self, game_id, won, coins):
+        self.toast_text = f"{minigame_records.GAME_NAMES[game_id]} {'성공' if won else '종료'} / 일반 보상 +{coins}코인"
+        self.toast_timer = 3.0
 
     def open_competition(self):
         self.panel_open = False
@@ -929,19 +933,36 @@ class Game:
     def resolve_daily_event(self, choice=0):
         if self.scene != "EVENT":
             return False
+        before = daily_events.normalize(self.daily_events)
+        money = self.state.money
+        inventory = dict(self.inventory)
+        stats = {key: getattr(self.cat, key) for key in daily_events.STAT_KEYS}
+        friendship = self.cat.friendship
+        growth_before = growth_records.normalize(self.state.growth_records, self.state.day)
         data, applied = daily_events.resolve(self.daily_events, self.cat, self.state, self.inventory, choice)
         if not applied:
             return False
         self.daily_events = data
         result = data["result"]
         growth_records.earn(self.state, max(0, result["coins"]))
+        if not self._save_progress():
+            self.daily_events = before
+            self.state.money = money
+            self.inventory.clear()
+            self.inventory.update(inventory)
+            for key, value in stats.items():
+                setattr(self.cat, key, value)
+            self.cat.friendship = friendship
+            self.state.growth_records = growth_before
+            self.toast_text = "이벤트 저장 실패. 다시 선택해 주세요."
+            self.toast_timer = 2.5
+            return False
         if result["coins"] > 0 and self.ach:
             self.ach.on_event("coins_earned", amount=result["coins"])
         self.toast_text = "이벤트 결과가 오늘의 활동에 기록되었습니다."
         self.toast_timer = 2.5
         self._start_cat_reaction(self.cat.mood)
         self.scene = "DAILY"
-        self._save_progress()
         return True
 
     def _event_choice_rect(self, index):

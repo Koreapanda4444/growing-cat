@@ -20,12 +20,13 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:
-    def __init__(self, screen, state=None, ach=None, on_save=None, on_activity=None, inventory=None):
+    def __init__(self, screen, state=None, ach=None, on_save=None, on_activity=None, inventory=None, on_result=None):
         self.screen = screen
         self.state = state
         self.ach = ach
         self.on_save = on_save
         self.on_activity = on_activity
+        self.on_result = on_result
         self.inventory = inventory if isinstance(inventory, dict) else {}
         self.challenge_page = 0
         self.message = ""
@@ -198,6 +199,8 @@ class MiniGameScreen:
             getattr(self.state, "minigame_records", None), self.selected, result, won, self.state.difficulty
         )
         self._sync_challenges()
+        if self.on_result:
+            self.on_result(self.selected, won, coins)
 
     def _sync_challenges(self):
         if self.state is not None:

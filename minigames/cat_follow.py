@@ -318,7 +318,7 @@ class CatFollowGame:
         self.screen.blit(m, m.get_rect(center=(w // 2, int(h * 0.45))))
 
         coins = self._coins_from(self.cats_correct, self.rounds_cleared)
-        sub = self.font.render(f"COINS +{coins}", True, (230, 230, 230))
+        sub = self.font.render(f"일반 보상 +{game_state.scale_coin(coins, self.difficulty)}코인", True, (230, 230, 230))
         self.screen.blit(sub, sub.get_rect(center=(w // 2, int(h * 0.56))))
 
         hint = self.font.render("ENTER를 누르면 돌아갑니다", True, (210, 210, 210))
