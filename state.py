@@ -365,6 +365,7 @@ class GameState:
         self.money = 0
         self.minigame_used = new_minigame_usage()
         self.minigame_records = {}
+        self.minigame_challenges = {}
 
     def advance_time(self):
         if self.time_phase == MORNING:

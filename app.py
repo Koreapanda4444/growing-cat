@@ -16,6 +16,7 @@ import competition
 import daily_events
 import daily_missions
 import minigame_records
+import minigame_challenges
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
@@ -411,6 +412,9 @@ class Game:
         self.inventory = normalize_inventory(data.get("inventory", {}))
         self.state.minigame_used = state.normalize_minigame_usage(data.get("minigame_used"))
         self.state.minigame_records = minigame_records.normalize(data.get("minigame_records"))
+        self.state.minigame_challenges = minigame_challenges.sync(
+            data.get("minigame_challenges"), self.state.minigame_records, self.state.difficulty, self.state.day
+        )
         usage = data.get("care_usage")
         if (isinstance(usage, dict) and usage.get("day") == self.state.day
                 and usage.get("phase") == self.state.time_phase
@@ -712,6 +716,7 @@ class Game:
             "inventory": clean_inventory,
             "minigame_used": state.normalize_minigame_usage(getattr(self.state, "minigame_used", None)),
             "minigame_records": minigame_records.normalize(self.state.minigame_records),
+            "minigame_challenges": minigame_challenges.normalize(self.state.minigame_challenges),
             "care_usage": {
                 "day": clean_day,
                 "phase": clean_phase,
@@ -765,7 +770,7 @@ class Game:
         shop.run()
 
     def open_minigame(self):
-        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active, on_activity=self._record_daily_activity).run()
+        MiniGameScreen(self.screen, self.state, self.ach, self._save_if_game_active, on_activity=self._record_daily_activity, inventory=self.inventory).run()
 
     def open_competition(self):
         self.panel_open = False

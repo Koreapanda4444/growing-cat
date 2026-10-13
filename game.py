@@ -1,6 +1,7 @@
 import pygame
 import state as game_state
 import minigame_records
+import minigame_challenges
 from minigames.memory_game import MemoryGame
 from minigames.cat_run import CatRunGame
 from minigames.cat_follow import CatFollowGame
@@ -18,12 +19,16 @@ FONT_PATH = asset_path("fonts", "ThinDungGeunMo.ttf")
 
 
 class MiniGameScreen:
-    def __init__(self, screen, state=None, ach=None, on_save=None, on_activity=None):
+    def __init__(self, screen, state=None, ach=None, on_save=None, on_activity=None, inventory=None):
         self.screen = screen
         self.state = state
         self.ach = ach
         self.on_save = on_save
         self.on_activity = on_activity
+        self.inventory = inventory if isinstance(inventory, dict) else {}
+        self.challenge_page = 0
+        self.message = ""
+        self.btn_challenges = pygame.Rect(232, 88, 150, 28)
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -47,6 +52,7 @@ class MiniGameScreen:
         self.card_footsteps = pygame.Rect(40, 320, 320, 90)
         self.card_laser = pygame.Rect(40, 420, 320, 90)
         self.btn_start = pygame.Rect(260, 525, 110, 36)
+        self._sync_challenges()
 
     def run(self):
         while self.running:
@@ -60,11 +66,13 @@ class MiniGameScreen:
             if event.type == pygame.QUIT:
                 raise GameQuit
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.view == "RECORDS":
+                if self.view in ("RECORDS", "CHALLENGES"):
                     self.view = "LIST"
                 else:
                     self.running = False
                 return
+            elif self.view == "CHALLENGES" and event.type == pygame.KEYDOWN and event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+                self.claim_challenge(event.key - pygame.K_1)
             elif event.type == pygame.KEYDOWN and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                 self.change_page(-1 if event.key == pygame.K_LEFT else 1)
             elif event.type == pygame.MOUSEWHEEL:
@@ -82,11 +90,26 @@ class MiniGameScreen:
         if self.btn_records.collidepoint(pos):
             self.view = "LIST" if self.view == "RECORDS" else "RECORDS"
             return
+        if self.btn_challenges.collidepoint(pos):
+            if self.view == "CHALLENGES":
+                self.view = "LIST"
+            else:
+                keys = list(minigame_records.GAME_NAMES)
+                self.challenge_page = keys.index(self.selected) if self.selected in keys else min(len(keys) - 1, self.page * 4)
+                self.view = "CHALLENGES"
+                self._sync_challenges()
+            return
         if self.prev_rect.collidepoint(pos):
             self.change_page(-1)
             return
         if self.next_rect.collidepoint(pos):
             self.change_page(1)
+            return
+        if self.view == "CHALLENGES":
+            for index in range(3):
+                if self.challenge_claim_rect(index).collidepoint(pos):
+                    self.claim_challenge(index)
+                    return
             return
         if self.view == "RECORDS":
             return
@@ -173,6 +196,40 @@ class MiniGameScreen:
         self.state.minigame_records = minigame_records.record_result(
             getattr(self.state, "minigame_records", None), self.selected, result, won, self.state.difficulty
         )
+        self._sync_challenges()
+
+    def _sync_challenges(self):
+        if self.state is not None:
+            self.state.minigame_challenges = minigame_challenges.sync(
+                getattr(self.state, "minigame_challenges", None), getattr(self.state, "minigame_records", None),
+                self.state.difficulty, self.state.day,
+            )
+
+    def claim_challenge(self, index):
+        if self.view != "CHALLENGES" or self.state is None or not 0 <= index < 3:
+            return False
+        key = list(minigame_records.GAME_NAMES)[self.challenge_page]
+        goal = minigame_challenges.definitions(key, self.state.difficulty)[index]
+        before = minigame_challenges.normalize(self.state.minigame_challenges)
+        money = self.state.money
+        inventory = dict(self.inventory)
+        data, reward = minigame_challenges.claim(before, goal["id"], self.state, self.inventory)
+        if reward is None:
+            return False
+        self.state.minigame_challenges = data
+        if self.on_save and self.on_save() is False:
+            self.state.minigame_challenges = before
+            self.state.money = money
+            self.inventory.clear()
+            self.inventory.update(inventory)
+            self.message = "보상 저장 실패. 다시 받아주세요."
+            return False
+        if self.ach:
+            self.ach.on_event("coins_earned", amount=reward["coins"])
+        self.message = f"특별 보상 +{reward['coins']}코인"
+        if reward["items"]:
+            self.message += " / " + " · ".join(f"{item} +{count}" for item, count in reward["items"].items())
+        return True
 
     def _scaled_result_coins(self, result):
         try:
@@ -205,6 +262,10 @@ class MiniGameScreen:
         return [(key, pygame.Rect(40, 120 + index * 100, 320, 90)) for index, key in enumerate(keys)]
 
     def change_page(self, delta):
+        if self.view == "CHALLENGES":
+            self.challenge_page = max(0, min(len(minigame_records.GAME_NAMES) - 1, self.challenge_page + delta))
+            self.message = ""
+            return
         last = (len(minigame_records.GAME_NAMES) - 1) // 4
         next_page = max(0, min(last, self.page + delta))
         if next_page != self.page:
@@ -218,8 +279,9 @@ class MiniGameScreen:
             pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
             label = self.hint_font.render(text, True, (0, 0, 0))
             self.screen.blit(label, label.get_rect(center=rect.center))
-        pages = (len(minigame_records.GAME_NAMES) + 3) // 4
-        self.screen.blit(self.hint_font.render(f"{self.page + 1}/{pages}", True, (0, 0, 0)), (198, 536))
+        pages = len(minigame_records.GAME_NAMES) if self.view == "CHALLENGES" else (len(minigame_records.GAME_NAMES) + 3) // 4
+        page = self.challenge_page if self.view == "CHALLENGES" else self.page
+        self.screen.blit(self.hint_font.render(f"{page + 1}/{pages}", True, (0, 0, 0)), (198, 536))
 
     def draw_records(self):
         data = minigame_records.normalize(getattr(self.state, "minigame_records", None))
@@ -234,10 +296,41 @@ class MiniGameScreen:
             self.screen.blit(self.hint_font.render(minigame_records.best_summary(key, entry), True, (65, 65, 65)), (rect.x + 12, rect.y + 56))
             self.screen.blit(self.hint_font.render(f"도전 완료 {entry['challenge_plays']}회 / 달성 {entry['challenge_wins']}회", True, (65, 65, 65)), (rect.x + 12, rect.y + 73))
 
+    def challenge_claim_rect(self, index):
+        return pygame.Rect(275, 258 + index * 100, 92, 25)
+
+    def draw_challenges(self):
+        key = list(minigame_records.GAME_NAMES)[self.challenge_page]
+        data = minigame_challenges.normalize(getattr(self.state, "minigame_challenges", None))
+        difficulty = getattr(self.state, "difficulty", "normal")
+        self.screen.blit(self.big_font.render(minigame_records.GAME_NAMES[key], True, (35, 35, 35)), (20, 132))
+        self.screen.blit(self.hint_font.render("일반 플레이 보상과 별도로, 각 목표당 한 번 지급", True, (70, 70, 70)), (20, 170))
+        for index, goal in enumerate(minigame_challenges.definitions(key, difficulty)):
+            rect = pygame.Rect(20, 200 + index * 100, 360, 90)
+            entry = data[goal["id"]]
+            pygame.draw.rect(self.screen, (215, 235, 215) if entry["unlocked"] else (225, 225, 225), rect, border_radius=5)
+            pygame.draw.rect(self.screen, (60, 60, 60), rect, 1, border_radius=5)
+            self.screen.blit(self.font.render(f"{index + 1}. {goal['title']}", True, (30, 30, 30)), (30, rect.y + 8))
+            self.screen.blit(self.hint_font.render(goal["description"], True, (65, 65, 65)), (30, rect.y + 35))
+            reward = f"특별 보상 +{goal['coins']}코인"
+            if goal["items"]:
+                reward += " / " + " · ".join(f"{item} {count}개" for item, count in goal["items"].items())
+            self.screen.blit(self.hint_font.render(reward, True, (65, 65, 65)), (30, rect.y + 62))
+            button = self.challenge_claim_rect(index)
+            enabled = entry["unlocked"] and not entry["claimed"]
+            pygame.draw.rect(self.screen, (200, 225, 200) if enabled else (210, 210, 210), button)
+            pygame.draw.rect(self.screen, (60, 60, 60), button, 1)
+            text = "받음" if entry["claimed"] else "보상 받기" if enabled else "미달성"
+            label = self.hint_font.render(text, True, (30, 30, 30) if enabled else (120, 120, 120))
+            self.screen.blit(label, label.get_rect(center=button.center))
+        self.draw_page_controls()
+        if self.message:
+            self.screen.blit(self.hint_font.render(self.message, True, (50, 105, 60)), (20, 577))
+
     def draw(self):
         self.screen.fill((235, 235, 235))
 
-        self.screen.blit(self.big_font.render("미니게임 기록" if self.view == "RECORDS" else "미니게임", True, (0, 0, 0)), (20, 20))
+        self.screen.blit(self.big_font.render("미니게임 기록" if self.view == "RECORDS" else "미니게임 도전 보상" if self.view == "CHALLENGES" else "미니게임", True, (0, 0, 0)), (20, 20))
         difficulty = getattr(self.state, "difficulty", "normal") if self.state else "normal"
         difficulty_label = game_state.get_difficulty_label(difficulty)
         self.screen.blit(self.font.render(f"난이도: {difficulty_label}", True, (70, 70, 70)), (20, 54))
@@ -251,6 +344,14 @@ class MiniGameScreen:
         pygame.draw.rect(self.screen, (0, 0, 0), self.btn_records, 1)
         label = self.font.render("게임 선택" if self.view == "RECORDS" else "기록 보기", True, (0, 0, 0))
         self.screen.blit(label, label.get_rect(center=self.btn_records.center))
+        pygame.draw.rect(self.screen, (215, 225, 215), self.btn_challenges)
+        pygame.draw.rect(self.screen, (0, 0, 0), self.btn_challenges, 1)
+        label = self.hint_font.render("게임 선택" if self.view == "CHALLENGES" else "도전 보상", True, (30, 30, 30))
+        self.screen.blit(label, label.get_rect(center=self.btn_challenges.center))
+        if self.view == "CHALLENGES":
+            self.draw_challenges()
+            pygame.display.flip()
+            return
         if self.view == "RECORDS":
             self.draw_records()
             self.draw_page_controls()

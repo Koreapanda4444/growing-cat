@@ -28,6 +28,7 @@ class MemoryGame:
         self.order_index = 0
         self.required_order = []
         self.stage_fail_start = 0
+        self.shuffle_reveal_until = None
         self.error_limit = {"easy": 6, "normal": 4, "hard": 3}[self.difficulty]
         self.clock = pygame.time.Clock()
         self.running = True
@@ -152,6 +153,10 @@ class MemoryGame:
                 random.shuffle(rects)
                 for card, rect in zip(hidden, rects):
                     card["rect"] = rect
+                    card["revealed"] = True
+                if hidden:
+                    self.shuffle_reveal_until = pygame.time.get_ticks() + max(650, round(self.base_preview_ms * 0.4))
+                    self.lock = True
         else:
             self.lock = True
             self.fail_count += 1
@@ -174,6 +179,12 @@ class MemoryGame:
 
     def update(self):
         now = pygame.time.get_ticks()
+        if self.shuffle_reveal_until is not None and now >= self.shuffle_reveal_until:
+            for card in self.cards:
+                if not card["matched"]:
+                    card["revealed"] = False
+            self.shuffle_reveal_until = None
+            self.lock = False
         if not self.started and self.reveal_end_ms and now >= self.reveal_end_ms:
             for c in self.cards:
                 if not c["matched"]:
@@ -195,6 +206,7 @@ class MemoryGame:
                 self.started = False
                 self.limit_start_ms = None
                 self.first = self.second = None
+                self.shuffle_reveal_until = None
                 self.lock = False
                 self._set_mismatch_timer(0)
                 pygame.event.clear(MISMATCH_EVENT)
@@ -232,7 +244,7 @@ class MemoryGame:
             rule = "자유 매칭" if self.stage == 1 else f"작은 번호 순서 · 다음 {target}"
             self.screen.blit(self.small_font.render(f"{rule} / 단계 실수 한도 {self.error_limit}", True, (90, 70, 70)), (20, 88))
             if self.stage >= 3:
-                self.screen.blit(self.small_font.render("두 쌍마다 남은 카드의 위치가 바뀝니다.", True, (90, 70, 70)), (20, 110))
+                self.screen.blit(self.small_font.render("재배치된 카드는 잠깐 다시 보여줍니다.", True, (90, 70, 70)), (20, 110))
         for card in self.cards:
             if card["revealed"] or card["matched"]:
                 self.screen.blit(card["image"], (card["rect"].x, card["rect"].y))
