@@ -984,6 +984,9 @@ class Game:
             elif value >= threshold:
                 return random.choice(lines)
 
+        if random.random() < 0.65:
+            return random.choice(state.MOOD_PROFILE[self.cat.mood]["lines"])
+
         personality = state.normalize_personality(getattr(self.cat, "personality", None))
         lines = CAT_CLICK_LINES.get(personality, CAT_CLICK_LINES["default"])
         return random.choice(lines)
@@ -1002,7 +1005,10 @@ class Game:
                 if self.actions_used[key]:
                     return True
                 if self.cat and not self.cat.check_game_over():
+                    previous_mood = self.cat.mood
                     getattr(self.cat, actions[index])()
+                    self.cat_dialogue_text = self.cat.care_reaction(key, previous_mood)
+                    self.cat_dialogue_timer = 2.2
                     self.actions_used[key] = True
                     save.save_game(self.make_save_data())
                     self.check_game_over()
@@ -1313,6 +1319,7 @@ class Game:
         self.screen.blit(self.back_image, self.back_rect)
         self._draw_day_phase_info()
         self._draw_money()
+        self._draw_cat_mood()
         self._draw_stats()
         self._draw_cat_sprite()
 
@@ -1332,6 +1339,12 @@ class Game:
 
         coin_text = self.coin_font.render(f"🪙 {money}", True, (0, 0, 0))
         self.screen.blit(coin_text, (INFO_X, INFO_Y + 22))
+
+    def _draw_cat_mood(self):
+        mood = state.MOOD_PROFILE[self.cat.mood]
+        pygame.draw.circle(self.screen, mood["color"], (INFO_X + 5, 90), 4)
+        label = self.hint_font.render(f"기분: {mood['label']}", True, mood["color"])
+        self.screen.blit(label, (INFO_X + 15, 82))
 
     def _draw_stats(self):
         self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))

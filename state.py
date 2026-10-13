@@ -185,6 +185,22 @@ PERSONALITY_PROFILE = {
 }
 
 
+MOOD_PROFILE = {
+    "happy": {"label": "행복함", "color": (40, 130, 70), "lines": (
+        "오늘은 모든 게 좋다냥!", "골골송을 불러주겠다냥.")},
+    "calm": {"label": "평온함", "color": (70, 110, 150), "lines": (
+        "편안하게 곁에 있겠다냥.", "지금처럼 천천히 지내자냥.")},
+    "tired": {"label": "피곤함", "color": (100, 90, 160), "lines": (
+        "눈꺼풀이 무겁다냥...", "잠깐 쉬었다 놀자냥.")},
+    "hungry": {"label": "배고픔", "color": (170, 100, 40), "lines": (
+        "밥그릇이 비어 있다냥.", "배고파서 힘이 안 난다냥.")},
+    "uncomfortable": {"label": "불편함", "color": (160, 65, 65), "lines": (
+        "털과 발바닥이 찝찝하다냥.", "깨끗하게 씻고 싶다냥.")},
+    "lonely": {"label": "심심함", "color": (140, 85, 105), "lines": (
+        "같이 놀아줄 수 있냥?", "오늘은 관심이 필요하다냥.")},
+}
+
+
 def normalize_difficulty(difficulty: str | None) -> str:
     value = str(difficulty or DIFFICULTY_NORMAL).strip().lower()
     if value not in DIFFICULTY_PROFILE:

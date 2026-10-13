@@ -78,6 +78,36 @@ class Cat:
     def get_display_name(self):
         return f"{self.name} - {self.stage}"
 
+    @property
+    def mood(self):
+        needs = (
+            ("hungry", (self.hunger - 70) / 30),
+            ("tired", (self.tiredness - 70) / 30),
+            ("uncomfortable", (30 - self.cleanliness) / 30),
+            ("lonely", (30 - self.happiness) / 30),
+        )
+        mood, urgency = max(needs, key=lambda need: need[1])
+        if urgency >= 0:
+            return mood
+        if (self.happiness >= 75 and self.cleanliness >= 65
+                and self.hunger <= 35 and self.tiredness <= 35):
+            return "happy"
+        return "calm"
+
+    def care_reaction(self, action, previous_mood=None):
+        mood = previous_mood or self.mood
+        relief = {
+            ("hungry", "feed"): "밥을 챙겨줘서 힘이 난다냥!",
+            ("tired", "sleep"): "푹 쉬면 다시 놀 수 있다냥.",
+            ("uncomfortable", "clean"): "털이 보송보송해졌다냥.",
+            ("lonely", "play"): "같이 놀아줘서 고맙다냥!",
+        }
+        if (mood, action) in relief:
+            return relief[mood, action]
+        if action == "play" and mood in ("hungry", "tired"):
+            return "재밌지만 밥이나 휴식도 필요하다냥."
+        return random.choice(state.MOOD_PROFILE[self.mood]["lines"])
+
     def _get_personality_modifier(self, stat_type: str) -> float:
         """성격에 따른 스탯 변화 배율 반환"""
         prof = state.get_personality_profile(self.personality)
