@@ -29,7 +29,13 @@ class CompetitionUI:
         self.small_font = load_font(FONT_PATH, 13)
 
         self.close_rect = pygame.Rect(360, 10, 30, 30)
-        self.enter_rect = pygame.Rect(245, 248, 120, 36)
+        self.enter_rect = pygame.Rect(245, 304, 120, 30)
+        self.view = "event"
+        self.page = 0
+        self.tabs = {key: pygame.Rect(20 + i * 123, 80, 114, 26)
+                     for i, key in enumerate(("event", "trophies", "history"))}
+        self.prev_rect = pygame.Rect(35, 525, 95, 30)
+        self.next_rect = pygame.Rect(270, 525, 95, 30)
 
     def run(self):
         clock = pygame.time.Clock()
@@ -51,14 +57,27 @@ class CompetitionUI:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
                     return
-                elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and self.view == "event":
                     self._try_enter()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+                elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    self.change_page(-1 if event.key == pygame.K_LEFT else 1)
+            elif event.type == pygame.MOUSEWHEEL:
+                self.change_page(-event.y)
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for key, rect in self.tabs.items():
+                    if rect.collidepoint(event.pos):
+                        self.view, self.page = key, 0
+                        return
+                if self.view != "event":
+                    for rect, delta in ((self.prev_rect, -1), (self.next_rect, 1)):
+                        if rect.collidepoint(event.pos):
+                            self.change_page(delta)
+                            return
                 if self.close_rect.collidepoint(event.pos):
                     self._click()
                     self.running = False
                     return
-                if self.enter_rect.collidepoint(event.pos):
+                if self.view == "event" and self.enter_rect.collidepoint(event.pos):
                     self._click()
                     self._try_enter()
 
@@ -106,11 +125,16 @@ class CompetitionUI:
     def draw(self):
         self.screen.fill(BG_COLOR)
         self._draw_top()
-        ctx = self._context()
-        self._draw_event_panel(ctx)
-        self._draw_score_panel(ctx)
-        self._draw_trophy_panel()
-        self._draw_history_panel()
+        for key, label in (("event", "대회·결과"), ("trophies", "트로피 도감"), ("history", "전체 기록")):
+            self._draw_button(self.tabs[key], "대회·결과" if key == "event" else label, enabled=self.view == key)
+        if self.view == "event":
+            ctx = self._context()
+            self._draw_event_panel(ctx)
+            self._draw_score_panel(ctx)
+            self._draw_trophy_panel()
+            self._draw_history_panel()
+        else:
+            self._draw_records()
         league = competition.league_info(self.competition_data)
         level = league["next"]
         text = f"다음 {level[0]}: {level[1]}P · {level[2]}승 / 우승=S등급" if level else "마스터 리그 달성! / 우승=S등급"
@@ -133,7 +157,7 @@ class CompetitionUI:
         self.screen.blit(x_text, x_text.get_rect(center=self.close_rect.center))
 
     def _draw_event_panel(self, ctx):
-        rect = pygame.Rect(20, 88, 360, 126)
+        rect = pygame.Rect(20, 112, 360, 126)
         pygame.draw.rect(self.screen, (252, 252, 252), rect)
         pygame.draw.rect(self.screen, BORDER, rect, 1)
 
@@ -152,14 +176,16 @@ class CompetitionUI:
         self.screen.blit(self.font.render(f"참가비: {ctx['fee']} 코인", True, (70, 70, 70)), (rect.x + 14, rect.y + 94))
 
     def _draw_score_panel(self, ctx):
-        rect = pygame.Rect(20, 226, 360, 82)
+        rect = pygame.Rect(20, 250, 360, 94)
         pygame.draw.rect(self.screen, (252, 252, 252), rect)
         pygame.draw.rect(self.screen, BORDER, rect, 1)
 
         score_text = self.font.render(f"예상 점수 {ctx['estimate']}점 / 예상 등급 {ctx['est_grade']}", True, (0, 0, 0))
         self.screen.blit(score_text, (rect.x + 14, rect.y + 12))
 
-        if ctx["today_result"]:
+        if self.message:
+            msg = self.message
+        elif ctx["today_result"]:
             result = ctx["today_result"]
             msg = f"오늘 결과: {result['grade']}등급 / {result['score']}점 / +{result['reward']}코인"
         elif not ctx["event_day"]:
@@ -177,7 +203,7 @@ class CompetitionUI:
         self._draw_button(self.enter_rect, "참가하기", enabled=enabled)
 
     def _draw_trophy_panel(self):
-        rect = pygame.Rect(20, 326, 360, 104)
+        rect = pygame.Rect(20, 356, 360, 98)
         pygame.draw.rect(self.screen, (252, 252, 252), rect)
         pygame.draw.rect(self.screen, BORDER, rect, 1)
 
@@ -199,7 +225,7 @@ class CompetitionUI:
             self.screen.blit(self.small_font.render(line, True, (55, 55, 55)), (rect.x + 14, rect.y + 38 + index * 20))
 
     def _draw_history_panel(self):
-        rect = pygame.Rect(20, 448, 360, 124)
+        rect = pygame.Rect(20, 466, 360, 104)
         pygame.draw.rect(self.screen, (252, 252, 252), rect)
         pygame.draw.rect(self.screen, BORDER, rect, 1)
 
@@ -209,7 +235,7 @@ class CompetitionUI:
             self.screen.blit(self.small_font.render("대회 참가 기록이 없습니다.", True, (80, 80, 80)), (rect.x + 14, rect.y + 42))
             return
 
-        for index, entry in enumerate(history[:4]):
+        for index, entry in enumerate(history[:3]):
             line = f"{entry['day']}일차 {entry['name']} {entry['grade']} / {entry['score']}점"
             self.screen.blit(self.small_font.render(line, True, (55, 55, 55)), (rect.x + 14, rect.y + 38 + index * 20))
 
@@ -220,3 +246,48 @@ class CompetitionUI:
         pygame.draw.rect(self.screen, BORDER, rect, 1)
         label = self.font.render(text, True, text_color)
         self.screen.blit(label, label.get_rect(center=rect.center))
+
+
+    def page_count(self):
+        if self.view == "trophies":
+            return (len(competition.COMPETITIONS) + 2) // 3
+        return max(1, (len(self.competition_data["history"]) + 3) // 4)
+
+    def change_page(self, delta):
+        if self.view != "event":
+            self.page = max(0, min(self.page_count() - 1, self.page + delta))
+
+    def _record_card(self, y, lines):
+        rect = pygame.Rect(20, y, 360, 82)
+        pygame.draw.rect(self.screen, (252, 252, 252), rect)
+        pygame.draw.rect(self.screen, BORDER, rect, 1)
+        for index, line in enumerate(lines):
+            font = self.font if index == 0 else self.small_font
+            self.screen.blit(font.render(line, True, (40, 40, 40)), (34, y + 10 + index * 22))
+
+    def _draw_records(self):
+        self.change_page(0)
+        total = competition.totals(self.competition_data)
+        self.screen.blit(self.font.render(f"총 {total['entries']}회 참가 · {total['wins']}승 (S등급)", True, BORDER), (20, 119))
+        if self.view == "trophies":
+            for i, comp in enumerate(competition.COMPETITIONS[self.page * 3:(self.page + 1) * 3]):
+                trophy = self.competition_data["trophies"].get(comp["id"], {})
+                recent = next((e for e in reversed(self.competition_data["history"]) if e["id"] == comp["id"]), None)
+                lines = [f"{comp['name']} · 최고 {trophy.get('best_grade') or '-'}",
+                         f"참가 {trophy.get('count', 0)}회 / 우승 {trophy.get('wins', 0)}회 / 최고 {trophy.get('best_score', 0)}점",
+                         f"최근: {recent['day']}일 {recent['grade']}등급 {recent['score']}점" if recent else "최근 저장 이력 없음"]
+                self._record_card(155 + i * 98, lines)
+            goals = " · ".join(self.competition_data["goals"]) or "아직 달성한 목표가 없습니다."
+            self.screen.blit(self.small_font.render("누적 목표: 5/10승 · 연승 목표: 3/5승", True, BORDER), (20, 462))
+            self.screen.blit(self.small_font.render(goals, True, (40, 110, 65)), (20, 488))
+        else:
+            history = list(reversed(self.competition_data["history"]))
+            for i, entry in enumerate(history[self.page * 4:(self.page + 1) * 4]):
+                self._record_card(145 + i * 90, [f"{entry['day']}일 · {entry['name']}",
+                    f"{entry['grade']}등급 / {entry['score']}점 / 일반 보상 {entry['reward']}코인"])
+            if not history:
+                self.screen.blit(self.font.render("참가 기록이 없습니다.", True, (80, 80, 80)), (20, 170))
+        self._draw_button(self.prev_rect, "이전", enabled=self.page > 0)
+        self._draw_button(self.next_rect, "다음", enabled=self.page + 1 < self.page_count())
+        caption = self.font.render(f"{self.page + 1}/{self.page_count()}", True, BORDER)
+        self.screen.blit(caption, caption.get_rect(center=(200, 540)))
