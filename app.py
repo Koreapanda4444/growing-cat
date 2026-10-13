@@ -13,6 +13,7 @@ from competition_ui import CompetitionUI
 import save
 import evolution
 import competition
+import daily_events
 from config import asset_path, base_path
 from items import inventory_item_from_shop_id, normalize_inventory, normalize_inventory_item
 from pg_utils import GameQuit, load_font, load_image, load_sound, play_music
@@ -71,7 +72,7 @@ CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화", "특별 
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
 CARE_STAT_KEYS = {"feed": "hunger", "play": "happiness", "clean": "cleanliness", "sleep": "tiredness"}
 FRIENDSHIP_ACTION_KEYS = (*CARE_ACTION_KEYS, "pet")
-MENU_ACTION_LABELS = ("설정", "미니게임", "대회", "상점", "가방", "업적", "앨범")
+MENU_ACTION_LABELS = ("설정", "미니게임", "대회", "상점", "가방", "업적", "앨범", "오늘의 활동")
 CAT_IMAGE_ROTATE_CHANCE = 0.20
 
 CAT_CLICK_LINES = {
@@ -349,6 +350,7 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.special_care = state.normalize_special_care(None, self.state.day)
+        self.daily_events = daily_events.new_data()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -424,8 +426,13 @@ class Game:
             self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.special_care = state.normalize_special_care(data.get("special_care"), self.state.day)
         self.competition = competition.normalize_competition_data(data.get("competition"))
+        self.daily_events = daily_events.normalize(data.get("daily_events"))
         self.scene = "MAIN"
         self.check_game_over()
+        if not self.game_over_reason:
+            if self._prepare_daily_event():
+                save.save_game(self.make_save_data())
+            self._show_pending_event()
 
     def load_image(self, filename):
         image = load_image(filename, alpha=True)
@@ -497,6 +504,7 @@ class Game:
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
         self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.special_care = state.normalize_special_care(None, self.state.day)
+        self.daily_events = daily_events.new_data()
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -515,10 +523,15 @@ class Game:
 
         self.scene = "MAIN"
         self.app_mode = "GAME"
+        self._prepare_daily_event()
+        self._show_pending_event()
         save.save_game(self.make_save_data())
 
     def advance_time(self):
         if not self.cat or self.scene != "MAIN" or self.cat.check_game_over():
+            return
+        if self.daily_events["status"] == "pending":
+            self.scene = "EVENT"
             return
         phase = self.state.advance_time()
         self.special_care = state.normalize_special_care(self.special_care, self.state.day)
@@ -541,6 +554,10 @@ class Game:
             self.evolve_timer = 0
 
         self.check_game_over()
+        if phase == state.MORNING and not self.game_over_reason:
+            self._prepare_daily_event()
+            if self.scene != "EVOLVE":
+                self._show_pending_event()
         save.save_game(self.make_save_data())
 
     def _grant_day_reward(self):
@@ -695,6 +712,7 @@ class Game:
                 "used": {key: bool(self.friendship_used.get(key, False)) for key in FRIENDSHIP_ACTION_KEYS},
             },
             "special_care": state.normalize_special_care(self.special_care, clean_day),
+            "daily_events": daily_events.normalize(self.daily_events),
             "competition": competition.copy_for_save(getattr(self, "competition", None)),
             "cat": {
                 "name": self.cat.name,
@@ -806,6 +824,75 @@ class Game:
         self.panel_open = False
         self.left_panel_open = False
         AlbumUI(self.screen, self.play_click_sound).run()
+
+    def _prepare_daily_event(self):
+        previous_day = self.daily_events["day"]
+        self.daily_events = daily_events.roll_for_day(self.daily_events, self.state.day, self.cat)
+        return self.daily_events["day"] != previous_day
+
+    def _show_pending_event(self):
+        if self.daily_events["status"] == "pending" and not self.game_over_reason:
+            self.scene = "EVENT"
+
+    def open_daily_content(self):
+        self.panel_open = False
+        self.left_panel_open = False
+        self.scene = "DAILY"
+
+    def resolve_daily_event(self, choice=0):
+        if self.scene != "EVENT":
+            return False
+        data, applied = daily_events.resolve(self.daily_events, self.cat, self.state, self.inventory, choice)
+        if not applied:
+            return False
+        self.daily_events = data
+        result = data["result"]
+        if result["coins"] > 0 and self.ach:
+            self.ach.on_event("coins_earned", amount=result["coins"])
+        self.toast_text = "이벤트 결과가 오늘의 활동에 기록되었습니다."
+        self.toast_timer = 2.5
+        self._start_cat_reaction(self.cat.mood)
+        self.scene = "DAILY"
+        save.save_game(self.make_save_data())
+        return True
+
+    def _event_choice_rect(self, index):
+        return pygame.Rect(35, 330 + index * 52, 330, 42)
+
+    def _daily_result_text(self):
+        result = self.daily_events.get("result") or {}
+        names = {"hunger": "배고픔", "tiredness": "피로", "happiness": "행복", "cleanliness": "청결"}
+        parts = [f"{names[key]} {value:+g}" for key, value in result.get("stats", {}).items() if value]
+        if result.get("coins"):
+            parts.append(f"코인 {result['coins']:+d}")
+        if result.get("friendship"):
+            parts.append(f"친밀도 {result['friendship']:+d}")
+        parts.extend(f"{item} +{count}" for item, count in result.get("items", {}).items())
+        return " / ".join(parts) or "조용히 하루를 보냈습니다."
+
+    def _draw_wrapped_text(self, text, pos, max_width, color=(70, 70, 70), font=None):
+        font = font or self.hint_font
+        x, y = pos
+        line = ""
+        for char in str(text):
+            if line and font.size(line + char)[0] > max_width:
+                self.screen.blit(font.render(line, True, color), (x, y))
+                y += font.get_height() + 4
+                line = ""
+            line += char
+        self.screen.blit(font.render(line, True, color), (x, y))
+        return y + font.get_height() + 4
+
+    def handle_click_daily_content(self, pos):
+        if self.scene == "EVENT":
+            if self._event_choice_rect(0).collidepoint(pos):
+                self.resolve_daily_event()
+            elif pygame.Rect(100, 490, 200, 30).collidepoint(pos):
+                self.scene = "MAIN"
+        elif pygame.Rect(120, 530, 160, 34).collidepoint(pos):
+            self.scene = "MAIN"
+        elif self.daily_events["status"] == "pending" and pygame.Rect(240, 205, 130, 32).collidepoint(pos):
+            self.scene = "EVENT"
 
     def open_evolve_menu(self):
         if not self.cat:
@@ -1199,6 +1286,7 @@ class Game:
             self.open_bag,
             self.open_achievements,
             self.open_album,
+            self.open_daily_content,
         )
         for index, action in enumerate(actions):
             if self._panel_button_rect(panel_x, index).collidepoint(pos):
@@ -1231,7 +1319,7 @@ class Game:
             return False
 
         if (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
-                and self.scene in ("EVOLVE_MENU", "SPECIAL_CARE") and not self.paused):
+                and self.scene in ("EVOLVE_MENU", "SPECIAL_CARE", "EVENT", "DAILY") and not self.paused):
             return False
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -1277,11 +1365,15 @@ class Game:
                 self.restart_game()
                 return True
 
+        if self.scene == "EVENT" and event.key in (pygame.K_RETURN, pygame.K_1):
+            self.resolve_daily_event()
+            return True
+
         if self.scene == "SPECIAL_CARE" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
             self.choose_special_care(self._special_care_choices()[event.key - pygame.K_1])
             return True
 
-        if self.scene in ("EVOLVE_MENU", "SPECIAL_CARE") and event.key == pygame.K_ESCAPE:
+        if self.scene in ("EVOLVE_MENU", "SPECIAL_CARE", "EVENT", "DAILY") and event.key == pygame.K_ESCAPE:
             self.scene = "MAIN"
             return True
 
@@ -1296,6 +1388,8 @@ class Game:
             self.handle_click_evolve_menu(event.pos)
         elif self.scene == "SPECIAL_CARE" and event.button == 1:
             self.handle_click_special_care(event.pos)
+        elif self.scene in ("EVENT", "DAILY") and event.button == 1:
+            self.handle_click_daily_content(event.pos)
 
     def update(self, dt: float):
         if self.toast_timer > 0.0:
@@ -1776,6 +1870,11 @@ class Game:
             self.draw_button(self._panel_button_rect(panel_x, index), label, self.panel_font)
 
     def draw(self):
+        if self.scene in ("EVENT", "DAILY"):
+            self.draw_daily_content()
+            self._finish_frame()
+            return
+
         if self.scene == "SPECIAL_CARE":
             self.draw_special_care()
             self._finish_frame()
@@ -1801,6 +1900,31 @@ class Game:
         self._draw_menu_panel()
         self.draw_button(self._advance_rect(), "다음 시간", self.tab_font)
         self._finish_frame()
+
+    def draw_daily_content(self):
+        self.screen.fill((245, 245, 245))
+        self.screen.blit(self.big_font.render(f"{self.state.day}일차 · 오늘의 활동", True, (30, 30, 30)), (20, 24))
+        event = daily_events.EVENTS.get(self.daily_events["event"])
+        if self.scene == "EVENT" and event:
+            panel = pygame.Rect(20, 118, 360, 420)
+            pygame.draw.rect(self.screen, (230, 235, 225), panel, border_radius=12)
+            pygame.draw.rect(self.screen, (60, 60, 60), panel, 2, border_radius=12)
+            self._draw_wrapped_text(event["title"], (35, 143), 330, font=self.big_font)
+            y = 185
+            for line in event["text"]:
+                y = self._draw_wrapped_text(line, (35, y), 330)
+            self._draw_wrapped_text("하루 한 번 발생 / 확인한 결과는 저장됩니다.", (35, 275), 330)
+            self.draw_button(self._event_choice_rect(0), "함께하기 (Enter)", self.panel_font)
+            self.draw_button(pygame.Rect(100, 490, 200, 30), "나중에 (ESC)", self.panel_font)
+            return
+        self.screen.blit(self.big_font.render("오늘의 이벤트", True, (30, 30, 30)), (20, 80))
+        self._draw_wrapped_text(event["title"] if event else "오늘은 조용한 하루입니다.", (20, 120), 360)
+        if self.daily_events["status"] == "pending":
+            self._draw_wrapped_text("아직 선택하지 않은 이야기가 있습니다.", (20, 158), 360)
+            self.draw_button(pygame.Rect(240, 205, 130, 32), "이벤트 보기", self.panel_font)
+        elif event:
+            self._draw_wrapped_text(self._daily_result_text(), (20, 158), 360)
+        self.draw_button(pygame.Rect(120, 530, 160, 34), "닫기 (ESC)", self.panel_font)
 
     def draw_special_care(self):
         self._draw_game_view_base()
@@ -1847,6 +1971,7 @@ class Game:
 
         if self.evolve_timer > 120:
             self.scene = "MAIN"
+            self._show_pending_event()
 
     def draw_evolve_menu(self):
         self._draw_game_view_base()
