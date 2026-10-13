@@ -68,6 +68,8 @@ CAT_IMAGE_LAYOUT_OVERRIDES = {
 
 CARE_ACTION_LABELS = ("밥", "놀기", "씻기", "잠자기", "진화")
 CARE_ACTION_KEYS = ("feed", "play", "clean", "sleep")
+CARE_STAT_KEYS = {"feed": "hunger", "play": "happiness", "clean": "cleanliness", "sleep": "tiredness"}
+FRIENDSHIP_ACTION_KEYS = (*CARE_ACTION_KEYS, "pet")
 MENU_ACTION_LABELS = ("설정", "미니게임", "대회", "상점", "가방", "업적", "앨범")
 CAT_IMAGE_ROTATE_CHANCE = 0.20
 
@@ -328,6 +330,7 @@ class Game:
         self.competition = competition.new_competition_data()
         self.scene = "MAIN"
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -389,6 +392,16 @@ class Game:
             self.actions_used = {key: bool(usage["used"].get(key, False)) for key in CARE_ACTION_KEYS}
         else:
             self.actions_used = {key: False for key in CARE_ACTION_KEYS}
+        self.cat.friendship = state.normalize_friendship(cat_data.get("friendship", 0))
+        friendship_usage = data.get("friendship_usage")
+        if (isinstance(friendship_usage, dict) and friendship_usage.get("day") == self.state.day
+                and friendship_usage.get("phase") == self.state.time_phase
+                and isinstance(friendship_usage.get("used"), dict)):
+            self.friendship_used = {
+                key: bool(friendship_usage["used"].get(key, False)) for key in FRIENDSHIP_ACTION_KEYS
+            }
+        else:
+            self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.competition = competition.normalize_competition_data(data.get("competition"))
         self.scene = "MAIN"
         self.check_game_over()
@@ -461,6 +474,7 @@ class Game:
         self.inventory = {}
         self.competition = competition.new_competition_data()
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self._cat_image_path = None
         self._cat_image = None
         self._cat_image_stage = None
@@ -490,8 +504,11 @@ class Game:
             self._grant_day_reward()
 
         self.actions_used = {"feed": False, "play": False, "clean": False, "sleep": False}
+        self.friendship_used = {key: False for key in FRIENDSHIP_ACTION_KEYS}
         self.state.minigame_used = state.new_minigame_usage()
 
+        if self.cat.mood in ("hungry", "tired", "uncomfortable", "lonely"):
+            self.cat.change_friendship(-1)
         self.check_game_over()
         evolved = not self.game_over_reason and phase == state.MORNING and self._try_auto_evolve()
         if evolved:
@@ -647,10 +664,16 @@ class Game:
                 "phase": clean_phase,
                 "used": {key: bool(self.actions_used.get(key, False)) for key in CARE_ACTION_KEYS},
             },
+            "friendship_usage": {
+                "day": clean_day,
+                "phase": clean_phase,
+                "used": {key: bool(self.friendship_used.get(key, False)) for key in FRIENDSHIP_ACTION_KEYS},
+            },
             "competition": competition.copy_for_save(getattr(self, "competition", None)),
             "cat": {
                 "name": self.cat.name,
                 "stage": self.cat.stage,
+                "friendship": state.normalize_friendship(self.cat.friendship),
                 "image": (
                     f"cats/{Path(self.cat.image_path).parent.name}/{Path(self.cat.image_path).name}"
                     if self.cat.image_path and Path(self.cat.image_path).parent.name in ("baby", "adult", "lion", "dino")
@@ -844,6 +867,9 @@ class Game:
         if not self.cat or self.cat.check_game_over() or item not in self.inventory or self.inventory[item] <= 0:
             return
 
+        action = "feed" if item in ("사료", "생선", "츄르") else "play"
+        before = getattr(self.cat, CARE_STAT_KEYS[action])
+        previous_mood = self.cat.mood
         used = True
         if item == "사료":
             self.cat.hunger = max(0, self.cat.hunger - 30)
@@ -865,6 +891,9 @@ class Game:
 
         self.inventory[item] -= 1
         self.cat._clamp_all()
+        self._record_care_friendship(action, before)
+        self.cat_dialogue_text = self.cat.care_reaction(action, previous_mood)
+        self.cat_dialogue_timer = 2.2
         save.save_game(self.make_save_data())
 
     def on_buy_item(self, item):
@@ -961,14 +990,35 @@ class Game:
         self.cat_dialogue_text = self._cat_dialogue_line()
         self.cat_dialogue_timer = 2.2
 
-        if random.random() < CAT_IMAGE_ROTATE_CHANCE and self.cat.rotate_image():
+        friendship_recorded = not self.friendship_used["pet"]
+        if friendship_recorded:
+            self.friendship_used["pet"] = True
+            if self.cat.mood in ("happy", "calm"):
+                self._change_friendship(1)
+
+        image_changed = random.random() < CAT_IMAGE_ROTATE_CHANCE and self.cat.rotate_image()
+        if image_changed:
             self._cat_image_path = None
             self._cat_image = None
             self._cat_image_stage = None
             self._cat_display_image = None
             self._cat_display_body_rect = None
+        if friendship_recorded or image_changed:
             save.save_game(self.make_save_data())
         return True
+
+    def _change_friendship(self, amount):
+        delta = self.cat.change_friendship(amount)
+        if delta:
+            self.toast_text = f"친밀도 {delta:+d}"
+            self.toast_timer = 1.5
+        return delta
+
+    def _record_care_friendship(self, action, before):
+        if self.friendship_used[action]:
+            return
+        self.friendship_used[action] = True
+        self._change_friendship(self.cat.care_friendship_change(action, before))
 
     def _cat_dialogue_line(self):
         for stat_name, threshold, lines in CAT_NEED_LINES:
@@ -1006,7 +1056,9 @@ class Game:
                     return True
                 if self.cat and not self.cat.check_game_over():
                     previous_mood = self.cat.mood
+                    before = getattr(self.cat, CARE_STAT_KEYS[key])
                     getattr(self.cat, actions[index])()
+                    self._record_care_friendship(key, before)
                     self.cat_dialogue_text = self.cat.care_reaction(key, previous_mood)
                     self.cat_dialogue_timer = 2.2
                     self.actions_used[key] = True
@@ -1320,6 +1372,7 @@ class Game:
         self._draw_day_phase_info()
         self._draw_money()
         self._draw_cat_mood()
+        self._draw_friendship()
         self._draw_stats()
         self._draw_cat_sprite()
 
@@ -1352,6 +1405,18 @@ class Game:
         )
         self.screen.blit(personality, (INFO_X, 106))
         self.screen.blit(preferred, (INFO_X, 128))
+
+    def _draw_friendship(self):
+        value = state.normalize_friendship(self.cat.friendship)
+        label, target, progress = state.friendship_progress(value)
+        self.screen.blit(self.hint_font.render(f"친밀도: {label}", True, (90, 55, 90)), (INFO_X, 154))
+        bar = pygame.Rect(INFO_X, 178, 180, 8)
+        pygame.draw.rect(self.screen, (225, 210, 225), bar)
+        if progress > 0:
+            pygame.draw.rect(self.screen, (175, 100, 160), (bar.x, bar.y, int(bar.width * progress), bar.height))
+        pygame.draw.rect(self.screen, (90, 55, 90), bar, 1)
+        text = "최고 단계" if value == state.FRIENDSHIP_MAX else f"{value}/{target} · 다음 단계까지 {target - value}"
+        self.screen.blit(self.hint_font.render(text, True, (90, 55, 90)), (INFO_X, 192))
 
     def _draw_stats(self):
         self.draw_bar(STAT_X, STAT_Y_START, "배고픔", self.cat.hunger, (255, 100, 100))

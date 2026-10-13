@@ -227,6 +227,31 @@ MOOD_PROFILE = {
 }
 
 
+FRIENDSHIP_MAX = 1000
+FRIENDSHIP_LEVELS = (
+    (0, "낯선 사이"), (100, "익숙한 사이"), (300, "친구"), (600, "단짝"), (1000, "가족"),
+)
+
+
+def normalize_friendship(value):
+    try:
+        return max(0, min(FRIENDSHIP_MAX, int(value)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def friendship_progress(value):
+    value = normalize_friendship(value)
+    for index in range(len(FRIENDSHIP_LEVELS) - 1, -1, -1):
+        start, label = FRIENDSHIP_LEVELS[index]
+        if value < start:
+            continue
+        if index == len(FRIENDSHIP_LEVELS) - 1:
+            return label, FRIENDSHIP_MAX, 1.0
+        target = FRIENDSHIP_LEVELS[index + 1][0]
+        return label, target, (value - start) / (target - start)
+
+
 def normalize_difficulty(difficulty: str | None) -> str:
     value = str(difficulty or DIFFICULTY_NORMAL).strip().lower()
     if value not in DIFFICULTY_PROFILE:

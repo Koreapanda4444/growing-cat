@@ -27,6 +27,7 @@ class Cat:
 
         self.alive = True
         self.runaway = False
+        self.friendship = 0
 
         self.image_path = image_path or self.random_image()
 
@@ -111,6 +112,24 @@ class Cat:
         profile = state.get_personality_profile(self.personality)
         lines = profile["care_lines"].get(action, state.MOOD_PROFILE[self.mood]["lines"])
         return random.choice(lines)
+
+    def change_friendship(self, amount):
+        before = self.friendship
+        self.friendship = state.normalize_friendship(before + amount)
+        return self.friendship - before
+
+    def care_friendship_change(self, action, before):
+        stat = {"feed": "hunger", "play": "happiness", "clean": "cleanliness", "sleep": "tiredness"}[action]
+        if self.check_game_over():
+            return -3
+        if action == "play" and (self.hunger >= 80 or self.tiredness >= 80):
+            return -2
+        recovery = before - getattr(self, stat) if action in ("feed", "sleep") else getattr(self, stat) - before
+        if recovery <= 0:
+            return 0
+        needed = before >= 60 if action in ("feed", "sleep") else before <= 40
+        preferred = state.get_personality_profile(self.personality)["preferred_action"] == action
+        return 2 + int(needed) + int(preferred)
 
     def _get_personality_modifier(self, stat_type: str, action=None) -> float:
         profile = state.get_personality_profile(self.personality)
