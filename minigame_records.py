@@ -13,7 +13,7 @@ def _int(value):
 
 def new_records():
     return {key: {"plays": 0, "wins": 0, "best": {}, "last": {}, "last_difficulty": "normal", "challenge_plays": 0, "challenge_wins": 0,
-                  "challenge_clears": {level: False for level in ("easy", "normal", "hard")}} for key in GAME_NAMES}
+                  "total_hits": 0, "total_misses": 0, "challenge_clears": {level: False for level in ("easy", "normal", "hard")}} for key in GAME_NAMES}
 
 
 def normalize(value):
@@ -32,6 +32,8 @@ def normalize(value):
                 entry[field] = {metric: _int(source[metric]) for metric in METRICS if metric in source}
         if isinstance(saved.get("last"), dict) and saved["last"]:
             entry["last"]["won"] = bool(saved["last"].get("won"))
+        entry["total_hits"] = _int(saved.get("total_hits"))
+        entry["total_misses"] = _int(saved.get("total_misses"))
         entry["challenge_plays"] = min(entry["plays"], _int(saved.get("challenge_plays")))
         entry["challenge_wins"] = min(entry["challenge_plays"], _int(saved.get("challenge_wins")))
         clears = saved.get("challenge_clears")
@@ -64,6 +66,9 @@ def record_result(value, game_id, result, won, difficulty="normal"):
             entry["challenge_wins"] += 1
             if difficulty in entry["challenge_clears"]:
                 entry["challenge_clears"][difficulty] = True
+    if game_id == "laser":
+        entry["total_hits"] += _int(result.get("hits"))
+        entry["total_misses"] += _int(result.get("misses"))
     for metric in BEST_METRICS[game_id]:
         if metric in result:
             entry["best"][metric] = max(entry["best"].get(metric, 0), _int(result[metric]))
@@ -83,4 +88,4 @@ def best_summary(game_id, entry):
         return f"최고 {best.get('score', 0)}점 / 최단 {seconds:g}초" if seconds else f"최고 {best.get('score', 0)}점 / 완주 기록 없음"
     if game_id == "footsteps":
         return f"최고 {best.get('rounds', 0)}라운드 / 기억 길이 {best.get('sequence_length', 0)}"
-    return f"최고 {best.get('score', 0)}점 / 콤보 {best.get('best_combo', 0)}"
+    return f"최고 {best.get('score', 0)} / 콤보 {best.get('best_combo', 0)} / 정확도 {best.get('accuracy', 0)}%"

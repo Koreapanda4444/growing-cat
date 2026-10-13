@@ -2,16 +2,13 @@ import random
 import math
 import pygame
 
-from pg_utils import screen_events
+from config import asset_path
+from pg_utils import screen_events, load_font
 import state as game_state
 
 
 def _get_font(size: int) -> pygame.font.Font:
-    for name in ("malgungothic", "AppleGothic", "NanumGothic", "Noto Sans CJK KR"):
-        f = pygame.font.SysFont(name, size)
-        if f:
-            return f
-    return pygame.font.SysFont(None, size)
+    return load_font(asset_path("fonts", "ThinDungGeunMo.ttf"), size)
 
 
 def _clamp_int(v: float, lo: int, hi: int) -> int:
@@ -95,7 +92,7 @@ def _draw_toast(screen, font, text, screen_h):
     screen.blit(bg, (20, screen_h - bg.get_height() - 20))
 
 
-def _draw_result(screen, fonts, screen_w, screen_h, won, score):
+def _draw_result(screen, fonts, screen_w, screen_h, won, score, best_combo=0, hits=0, misses=0, challenge=False):
     overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 180))
     screen.blit(overlay, (0, 0))
@@ -104,22 +101,42 @@ def _draw_result(screen, fonts, screen_w, screen_h, won, score):
     title = fonts["big"].render(msg, True, (255, 255, 255))
     screen.blit(title, title.get_rect(center=(screen_w // 2, int(screen_h * 0.45))))
 
-    coins = _coins_from_score(score, won)
+    coins = min(85, _coins_from_score(score, won) + (10 if won else 0)) if challenge else _coins_from_score(score, won)
     score_text = fonts["result"].render(f"SCORE {score}  /  COINS +{coins}", True, (230, 230, 230))
     screen.blit(score_text, score_text.get_rect(center=(screen_w // 2, int(screen_h * 0.55))))
+
+    accuracy = hits * 100 // (hits + misses) if hits + misses else 0
+    details = fonts["hud"].render(f"최고 콤보 {best_combo} / 정확도 {accuracy}% / 적중 {hits}", True, (230, 230, 230))
+    screen.blit(details, details.get_rect(center=(screen_w // 2, int(screen_h * 0.61))))
 
     hint = fonts["result"].render("ENTER를 누르면 돌아갑니다", True, (210, 210, 210))
     screen.blit(hint, hint.get_rect(center=(screen_w // 2, int(screen_h * 0.66))))
 
 
-def _build_result(won, score, best_combo, hits, misses, *, cancelled=False, quit_requested=False):
+def challenge_goals(difficulty):
+    level = game_state.normalize_difficulty(difficulty)
+    return {"easy": {"combo": 5, "accuracy": 65, "hits": 8},
+            "normal": {"combo": 7, "accuracy": 75, "hits": 10},
+            "hard": {"combo": 9, "accuracy": 85, "hits": 12}}[level]
+
+
+def challenge_achieved(score, target_score, best_combo, hits, misses, goals):
+    return (score >= target_score and best_combo >= goals["combo"] and hits >= goals["hits"]
+            and hits * 100 >= goals["accuracy"] * (hits + misses))
+
+
+def _build_result(won, score, best_combo, hits, misses, *, cancelled=False, quit_requested=False, challenge=False):
+    coins = _coins_from_score(score, won)
+    if challenge:
+        coins = min(85, coins + (10 if won else 0))
     return {"won": won and not cancelled, "score": score, "best_combo": best_combo,
-            "hits": hits, "misses": misses, "accuracy": round(hits * 100 / (hits + misses)) if hits + misses else 0,
-            "coins": 0 if cancelled else _coins_from_score(score, won),
+            "mode": "challenge" if challenge else "normal", "challenge_won": challenge and won and not cancelled,
+            "hits": hits, "misses": misses, "accuracy": hits * 100 // (hits + misses) if hits + misses else 0,
+            "coins": 0 if cancelled else coins,
             "cancelled": cancelled, "quit_requested": quit_requested}
 
 
-def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "normal") -> dict:
+def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "normal", challenge=False) -> dict:
     if not pygame.font.get_init():
         pygame.font.init()
 
@@ -127,15 +144,17 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
     W, H = screen.get_size()
     fonts = _get_laser_fonts(H)
     settings = _laser_settings(difficulty)
+    font_height = H
+    goals = challenge_goals(difficulty)
 
     TIME_LIMIT = settings["time_limit"]
 
-    TARGET_SCORE = settings["target_score"]
+    TARGET_SCORE = round(settings["target_score"] * (1.1 if challenge else 1.0))
 
     BASE_RADIUS = settings["base_radius"]
     MIN_RADIUS = settings["min_radius"]
 
-    BASE_SPEED = settings["base_speed"]
+    BASE_SPEED = settings["base_speed"] * (1.08 if challenge else 1.0)
     MAX_SPEED = settings["max_speed"]
 
     COMBO_GRACE = settings["combo_grace"]
@@ -172,11 +191,13 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
     while running:
         dt = clock.tick(60) / 1000.0
         W, H = screen.get_size()
-        fonts = _get_laser_fonts(H)
+        if H != font_height:
+            fonts = _get_laser_fonts(H)
+            font_height = H
 
         for event in screen_events():
             if event.type == pygame.QUIT:
-                return _build_result(won, score, best_combo, hits, misses, cancelled=phase != "RESULT", quit_requested=True)
+                return _build_result(won, score, best_combo, hits, misses, cancelled=phase != "RESULT", quit_requested=True, challenge=challenge)
 
             if phase == "RESULT":
                 if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
@@ -185,7 +206,7 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
                 continue
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return _build_result(False, score, best_combo, hits, misses, cancelled=True)
+                return _build_result(False, score, best_combo, hits, misses, cancelled=True, challenge=challenge)
 
             if phase == "PLAY":
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -240,7 +261,7 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
             if time_left <= 0:
                 time_left = 0
                 phase = "RESULT"
-                won = score >= TARGET_SCORE
+                won = challenge_achieved(score, TARGET_SCORE, best_combo, hits, misses, goals) if challenge else score >= TARGET_SCORE
 
             if combo_timer > 0:
                 combo_timer -= dt
@@ -258,8 +279,9 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
                 x = W - radius
                 vx = -abs(vx)
 
-            if y - radius < 0:
-                y = radius
+            top = 110 if challenge else 0
+            if y - radius < top:
+                y = top + radius
                 vy = abs(vy)
             elif y + radius > H:
                 y = H - radius
@@ -275,14 +297,20 @@ def run_laser_chase(screen: pygame.Surface, ach=None, difficulty: str | None = "
 
         screen.fill((18, 18, 22))
         _draw_hud(screen, fonts["hud"], score, TARGET_SCORE, time_left, best_combo)
+        accuracy_pct = hits * 100 // (hits + misses) if hits + misses else 0
+        detail = f"적중 {hits} / 미스 {misses} / 정확도 {accuracy_pct}%"
+        screen.blit(fonts["hud"].render(detail, True, (225, 225, 225)), (16, 62))
+        if challenge:
+            text = f"도전: 콤보 {goals['combo']} / 적중 {goals['hits']} / 정확도 {goals['accuracy']}%"
+            screen.blit(fonts["hud"].render(text, True, (240, 210, 150)), (16, 85))
         _draw_particles(screen, particles)
         _draw_target(screen, x, y, radius)
         if toast_timer > 0 and toast_text:
             _draw_toast(screen, fonts["hud"], toast_text, H)
 
         if phase == "RESULT":
-            _draw_result(screen, fonts, W, H, won, score)
+            _draw_result(screen, fonts, W, H, won, score, best_combo, hits, misses, challenge)
 
         pygame.display.flip()
 
-    return _build_result(won, score, best_combo, hits, misses)
+    return _build_result(won, score, best_combo, hits, misses, challenge=challenge)
