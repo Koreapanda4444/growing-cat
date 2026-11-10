@@ -89,5 +89,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'New release published, but old release cleanup failed' }
           }
           else {
-            gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/tags/cat" 2>$null | Out-Null
+            gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/cat" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+              gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/tags/cat"
+              if ($LASTEXITCODE -ne 0) { throw 'New release published, but old tag cleanup failed' }
+            }
           }
+          $global:LASTEXITCODE = 0
